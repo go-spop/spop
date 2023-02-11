@@ -2,11 +2,10 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"net"
 
-	"log"
-
-	spoe "github.com/criteo/haproxy-spoe-go"
+	"github.com/go-spop/spoe"
 )
 
 func getReputation(ip net.IP) (float64, error) {

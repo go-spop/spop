@@ -1,8 +1,13 @@
-[![GoDoc](https://godoc.org/github.com/criteo/haproxy-spoe-go?status.svg)](https://godoc.org/github.com/criteo/haproxy-spoe-go)
+[![GoDoc](https://godoc.org/github.com/go-spop/spoe?status.svg)](https://godoc.org/github.com/go-spop/spoe)
 
 # SPOE in Go
 
 An implementation of the SPOP protocol in Go. (https://www.haproxy.org/download/2.0/doc/SPOE.txt)
+
+## Fork
+
+This is a hard fork of [github.com/criteo/haproxy-spoe-go](https://github.com/criteo/haproxy-spoe-go) due to that
+library seemingly being unmaintained and an unknown issue with their git history.
 
 ## SPOE
 
@@ -35,7 +40,7 @@ import (
 
 	"log"
 
-	spoe "github.com/criteo/haproxy-spoe-go"
+	"github.com/go-spop/spoe"
 )
 
 func getReputation(ip net.IP) (float64, error) {
