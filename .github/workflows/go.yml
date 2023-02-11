@@ -12,12 +12,10 @@ jobs:
     strategy:
       matrix:
         go: [
-              "1.17",
               "1.18",
               "1.19",
               "1.20",
         ]
-      fail-fast: true
     name: Go ${{ matrix.go }} Build / Test
     steps:
     - name: Checkout
