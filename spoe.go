@@ -5,8 +5,6 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"github.com/pkg/errors"
 	"golang.org/x/net/netutil"
 )
@@ -41,6 +39,7 @@ type EngKey struct {
 type Agent struct {
 	Handler Handler
 	cfg     Config
+	log     Logger
 
 	maxFrameSize int
 
@@ -48,8 +47,16 @@ type Agent struct {
 	engines map[EngKey]*Engine
 }
 
-func New(h Handler) *Agent {
-	return NewWithConfig(h, defaultConfig)
+type Opt func(agent *Agent)
+
+func WithLogger(l Logger) Opt {
+	return func(agent *Agent) {
+		agent.log = l
+	}
+}
+
+func New(h Handler, opts ...Opt) *Agent {
+	return NewWithConfig(h, defaultConfig, opts...)
 }
 
 type Engine struct {
@@ -57,12 +64,22 @@ type Engine struct {
 	count  int32
 }
 
-func NewWithConfig(h Handler, cfg Config) *Agent {
-	return &Agent{
+func NewWithConfig(h Handler, cfg Config, opts ...Opt) *Agent {
+	agent := &Agent{
 		Handler: h,
 		cfg:     cfg,
 		engines: make(map[EngKey]*Engine),
 	}
+
+	for _, opt := range opts {
+		opt(agent)
+	}
+
+	if agent.log == nil {
+		agent.log = &nillogger{}
+	}
+
+	return agent
 }
 
 func (a *Agent) ListenAndServe(addr string) error {
@@ -72,7 +89,7 @@ func (a *Agent) ListenAndServe(addr string) error {
 	}
 	defer lis.Close()
 	if a.cfg.MaxConnections > 0 {
-		log.Infof("spoe: max connections: %d", a.cfg.MaxConnections)
+		a.log.Infof("spoe: max connections: %d", a.cfg.MaxConnections)
 		lis = netutil.LimitListener(lis, a.cfg.MaxConnections)
 	}
 
@@ -80,7 +97,7 @@ func (a *Agent) ListenAndServe(addr string) error {
 }
 
 func (a *Agent) Serve(lis net.Listener) error {
-	log.Infof("spoe: listening on %s", lis.Addr().String())
+	a.log.Infof("spoe: listening on %s", lis.Addr().String())
 
 	for {
 		c, err := lis.Accept()
@@ -99,18 +116,21 @@ func (a *Agent) Serve(lis net.Listener) error {
 			}
 		}
 
-		log.Debugf("spoe: connection from %s", c.RemoteAddr())
+		a.log.Debugf("spoe: connection from %s", c.RemoteAddr())
 
 		go func() {
-			c := &conn{
-				Conn:        c,
-				handler:     a.Handler,
-				cfg:         a.cfg,
+			spoeconn := &conn{
+				Conn:    c,
+				handler: a.Handler,
+				cfg:     a.cfg,
+				log:     a.log,
+
 				notifyTasks: make(chan Frame),
 			}
-			err := c.run(a)
+
+			err := spoeconn.run(a)
 			if err != nil {
-				log.Warnf("spoe: error handling connection: %s", err)
+				a.log.Warnf("spoe: error handling connection: %s", err)
 			}
 		}()
 	}

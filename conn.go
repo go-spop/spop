@@ -5,8 +5,6 @@ import (
 	"net"
 	"sync/atomic"
 	"time"
-
-	log "github.com/sirupsen/logrus"
 )
 
 const workerIdleTimeout = 2 * time.Second
@@ -14,6 +12,7 @@ const workerIdleTimeout = 2 * time.Second
 type conn struct {
 	net.Conn
 	cfg Config
+	log Logger
 
 	handler   Handler
 	frameSize int
@@ -29,7 +28,7 @@ func (c *conn) run(a *Agent) error {
 	done := make(chan struct{})
 	defer close(done)
 
-	cod := newCodec(c.Conn, c.cfg)
+	cod := newCodec(c.Conn, c.cfg, c.log)
 
 	myframe := Frame{}
 	ok, err := cod.decodeFrame(&myframe)
@@ -53,13 +52,13 @@ func (c *conn) run(a *Agent) error {
 	defer func() {
 		df, err := c.disconnectFrame(disconnError)
 		if err != nil {
-			log.Errorf("spoe disconnectFrame error : %s", err)
+			c.log.Errorf("spoe disconnectFrame error : %s", err)
 			return
 		}
 
 		err = cod.encodeFrame(df)
 		if err != nil {
-			log.Infof("spoe session ending with: %s", err)
+			c.log.Infof("spoe session ending with: %s", err)
 			return
 		}
 	}()
@@ -112,7 +111,7 @@ func (c *conn) run(a *Agent) error {
 			case frame := <-frames:
 				err = cod.encodeFrame(frame)
 				if err != nil {
-					log.Errorf("spoe reply problem: %s", err)
+					c.log.Errorf("spoe reply problem: %s", err)
 					continue
 				}
 			}
@@ -152,7 +151,7 @@ func (c *conn) run(a *Agent) error {
 func (c *conn) runWorker(f Frame, frames chan Frame) {
 	err := c.handleNotify(f, frames)
 	if err != nil {
-		log.Errorf("spoe error during first notify handle: %s", err)
+		c.log.Errorf("spoe error during first notify handle: %s", err)
 	}
 	timeout := time.NewTimer(workerIdleTimeout)
 
@@ -161,7 +160,7 @@ func (c *conn) runWorker(f Frame, frames chan Frame) {
 		case f := <-c.notifyTasks:
 			err := c.handleNotify(f, frames)
 			if err != nil {
-				log.Errorf("spoe error during notify handle: %s", err)
+				c.log.Errorf("spoe error during notify handle: %s", err)
 			}
 			timeout.Reset(workerIdleTimeout)
 		case <-timeout.C:

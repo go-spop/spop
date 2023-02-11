@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	pool "github.com/libp2p/go-buffer-pool"
-	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,7 +27,7 @@ func TestSPOE(t *testing.T) {
 	client, err := net.Dial("tcp", lis.Addr().String())
 	require.NoError(t, err)
 
-	cod := newCodec(client, defaultConfig)
+	cod := newCodec(client, defaultConfig, &nillogger{})
 
 	// hello
 	helloReq := helloFrame(t)
@@ -76,7 +75,7 @@ func TestSPOEUnix(t *testing.T) {
 	client, err := net.Dial("unix", sock)
 	require.NoError(t, err)
 
-	cod := newCodec(client, defaultConfig)
+	cod := newCodec(client, defaultConfig, &nillogger{})
 
 	// hello
 	helloReq := helloFrame(t)
@@ -102,7 +101,6 @@ func TestSPOEUnix(t *testing.T) {
 }
 
 func BenchmarkSPOE(b *testing.B) {
-	log.SetLevel(log.FatalLevel)
 	spoa := New(func(msgs *MessageIterator) ([]Action, error) {
 		for msgs.Next() {
 		}
@@ -120,7 +118,7 @@ func BenchmarkSPOE(b *testing.B) {
 	client, err := net.Dial("tcp", lis.Addr().String())
 	require.NoError(b, err)
 
-	cod := newCodec(client, defaultConfig)
+	cod := newCodec(client, defaultConfig, &nillogger{})
 
 	// hello
 	helloReq := helloFrame(b)

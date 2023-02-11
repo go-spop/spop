@@ -2,8 +2,8 @@ package spoe
 
 import (
 	"fmt"
+
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 func (c *conn) disconnectFrame(e spoeError) (Frame, error) {
@@ -36,7 +36,7 @@ func (c *conn) disconnectFrame(e spoeError) (Frame, error) {
 
 func (c *conn) handleDisconnect(f Frame) error {
 	data, _, err := decodeKVs(f.data, -1)
-	log.Debugf("spoe: Disconnect from %s: %+v", c.Conn.RemoteAddr(), data)
+	c.log.Debugf("spoe: Disconnect from %s: %+v", c.Conn.RemoteAddr(), data)
 	if err != nil {
 		return errors.Wrap(err, "disconnect")
 	}
@@ -56,7 +56,7 @@ func (c *conn) handleDisconnect(f Frame) error {
 
 	if spoeError(code) == spoeErrorFragNotSupported {
 		// TODO: understand why we have this message
-		log.Info("spoe: Disconnect with \"fragmentation not supported\"")
+		c.log.Infof("spoe: Disconnect with \"fragmentation not supported\"")
 		return nil
 	}
 	message, okMessage := spoeErrorMessages[spoeError(code)]

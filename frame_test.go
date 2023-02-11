@@ -18,8 +18,8 @@ func TestFrameEncoding(t *testing.T) {
 	}
 
 	server, client := net.Pipe()
-	rcod := newCodec(server, defaultConfig)
-	wcod := newCodec(client, defaultConfig)
+	rcod := newCodec(server, defaultConfig, &nillogger{})
+	wcod := newCodec(client, defaultConfig, &nillogger{})
 
 	go func() {
 		err := wcod.encodeFrame(f)

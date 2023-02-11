@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 const (
@@ -27,7 +26,7 @@ func (c *conn) handleHello(frame Frame) (Frame, map[string]bool, bool, error) {
 		return frame, nil, false, errors.Wrap(err, "hello")
 	}
 
-	log.Debugf("spoe: hello from %s: %+v", c.Conn.RemoteAddr(), data)
+	c.log.Debugf("spoe: hello from %s: %+v", c.Conn.RemoteAddr(), data)
 
 	remoteFrameSize, ok := data[helloKeyMaxFrameSize].(uint)
 	if !ok {
