@@ -51,6 +51,17 @@ type Message struct {
 	Args *ArgIterator
 }
 
+func NewMessageIterator(b []byte) *MessageIterator {
+	return &MessageIterator{
+		b: b,
+		Message: Message{
+			Args: &ArgIterator{
+				b: b,
+			},
+		},
+	}
+}
+
 type MessageIterator struct {
 	b   []byte
 	err error
@@ -97,14 +108,7 @@ func (i *MessageIterator) Next() bool {
 }
 
 func (c *conn) handleNotify(f Frame, acks chan Frame) error {
-	messages := &MessageIterator{
-		b: f.data,
-		Message: Message{
-			Args: &ArgIterator{
-				b: f.data,
-			},
-		},
-	}
+	messages := NewMessageIterator(f.data)
 
 	actions, err := c.handler(messages)
 	if err != nil {
