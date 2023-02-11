@@ -62,18 +62,24 @@ func (c *conn) handleHello(frame Frame) (Frame, map[string]bool, bool, error) {
 		return frame, nil, false, fmt.Errorf("hello: incompatible version %s, need %s", remoteSupportedVersions, version)
 	}
 
+	healthcheck, _ := data[helloKeyHealthcheck].(bool)
+
 	remoteCapabilitiesStr, ok := data[helloKeyCapabilities].(string)
 	if !ok {
 		return frame, nil, false, fmt.Errorf("hello: expected %s", helloKeyCapabilities)
 	}
-	remoteCapabilities := parseCapabilities(remoteCapabilitiesStr)
-	if !remoteCapabilities[capabilityPipelining] {
-		return frame, nil, false, fmt.Errorf("hello: expected pipelining capability")
-	}
 
-	c.engineID, _ = data[helloKeyEngineID].(string)
-	if len(c.engineID) == 0 {
-		return frame, nil, false, fmt.Errorf("hello: engine-id not found")
+	remoteCapabilities := parseCapabilities(remoteCapabilitiesStr)
+
+	if !healthcheck {
+		if !remoteCapabilities[capabilityPipelining] {
+			return frame, nil, false, fmt.Errorf("hello: expected pipelining capability")
+		}
+
+		c.engineID, _ = data[helloKeyEngineID].(string)
+		if len(c.engineID) == 0 {
+			return frame, nil, false, fmt.Errorf("hello: engine-id not found")
+		}
 	}
 
 	frame.ftype = frameTypeAgentHello
@@ -105,8 +111,6 @@ func (c *conn) handleHello(frame Frame) (Frame, map[string]bool, bool, error) {
 	off += n
 
 	frame.data = frame.data[:off]
-
-	healthcheck, _ := data[helloKeyHealthcheck].(bool)
 
 	return frame, remoteCapabilities, healthcheck, nil
 }
