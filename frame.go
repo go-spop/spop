@@ -3,6 +3,7 @@ package spoe
 import (
 	"bufio"
 	"encoding/binary"
+	gerrs "errors"
 	"fmt"
 	"io"
 	"net"
@@ -10,11 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	gerrs "errors"
-
 	pool "github.com/libp2p/go-buffer-pool"
 	"github.com/pkg/errors"
-	log "github.com/sirupsen/logrus"
 )
 
 type frameType byte
@@ -53,13 +51,15 @@ type codec struct {
 	conn net.Conn
 	buff *bufio.ReadWriter
 	cfg  Config
+	log  Logger
 }
 
-func newCodec(conn net.Conn, cfg Config) *codec {
+func newCodec(conn net.Conn, cfg Config, logger Logger) *codec {
 	return &codec{
 		conn: conn,
 		buff: bufio.NewReadWriter(bufio.NewReader(conn), bufio.NewWriter(conn)),
 		cfg:  cfg,
+		log:  logger,
 	}
 }
 
@@ -80,7 +80,7 @@ func (c *codec) decodeFrame(frame *Frame) (bool, error) {
 	}
 	// special case for idle timeout
 	if gerrs.Is(err, os.ErrDeadlineExceeded) {
-		log.Debug("spoe: connection idle timeout")
+		c.log.Debugf("spoe: connection idle timeout")
 		return false, nil
 	}
 
