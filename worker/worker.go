@@ -6,9 +6,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/negasus/haproxy-spoe-go/frame"
-	"github.com/negasus/haproxy-spoe-go/logger"
-	"github.com/negasus/haproxy-spoe-go/request"
+	"github.com/go-spoe/spoe/frame"
+	"github.com/go-spoe/spoe/logger"
+	"github.com/go-spoe/spoe/request"
 )
 
 const (

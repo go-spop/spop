@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/negasus/haproxy-spoe-go/varint"
+	"github.com/go-spoe/spoe/varint"
 )
 
 func (f *Frame) Encode(dest io.Writer) (n int, err error) {

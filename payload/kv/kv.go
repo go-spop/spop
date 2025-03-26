@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/negasus/haproxy-spoe-go/typeddata"
-	"github.com/negasus/haproxy-spoe-go/varint"
+	"github.com/go-spoe/spoe/typeddata"
+	"github.com/go-spoe/spoe/varint"
 )
 
 var kvPool = sync.Pool{

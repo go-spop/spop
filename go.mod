@@ -1,3 +1,3 @@
-module github.com/negasus/haproxy-spoe-go
+module github.com/go-spoe/spoe
 
-go 1.19
+go 1.24
