@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spoe/spoe/client"
-	"github.com/go-spoe/spoe/logger"
-	"github.com/go-spoe/spoe/request"
+	"github.com/go-spop/spop/client"
+	"github.com/go-spop/spop/logger"
+	"github.com/go-spop/spop/request"
 )
 
 type MockedHandler struct {

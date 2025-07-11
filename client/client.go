@@ -7,7 +7,7 @@ import (
 	"io"
 	"net"
 
-	"github.com/go-spoe/spoe/frame"
+	"github.com/go-spop/spop/frame"
 )
 
 // Client is a simple client for spop protocol, this should only be used for testing purpose

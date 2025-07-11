@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/varint"
 )
 
 func (f *Frame) Encode(dest io.Writer) (n int, err error) {

@@ -1,4 +1,4 @@
-# Haproxy SPOE Golang Agent Library [![Go Report Card](https://goreportcard.com/badge/github.com/go-spoe/spoe)](https://goreportcard.com/report/github.com/go-spoe/spoe) ![](https://github.com/go-spoe/spoe/workflows/Test/badge.svg)
+# Haproxy SPOE Golang Agent Library [![Go Report Card](https://goreportcard.com/badge/github.com/go-spop/spop)](https://goreportcard.com/report/github.com/go-spop/spop) ![](https://github.com/go-spop/spop/workflows/Test/badge.svg)
 
 Terms from [Haproxy SPOE specification](https://www.haproxy.org/download/1.9/doc/SPOE.txt)
 
@@ -29,7 +29,7 @@ This library implements SPOA for Golang applications
 ## Install
 
 ```
-go get -u github.com/go-spoe/spoe
+go get -u github.com/go-spop/spop
 ```
 
 ## Example
@@ -47,10 +47,10 @@ Golang backend application for this example
 package main
 
 import (
-	"github.com/go-spoe/spoe/action"
-	"github.com/go-spoe/spoe/agent"
-	"github.com/go-spoe/spoe/request"
-        "github.com/go-spoe/spoe/logger"
+	"github.com/go-spop/spop/action"
+	"github.com/go-spop/spop/agent"
+	"github.com/go-spop/spop/request"
+        "github.com/go-spop/spop/logger"
 	"log"
 	"math/rand"
 	"net"

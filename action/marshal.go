@@ -3,8 +3,8 @@ package action
 import (
 	"fmt"
 
-	"github.com/go-spoe/spoe/typeddata"
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/typeddata"
+	"github.com/go-spop/spop/varint"
 )
 
 func (action *Action) Marshal(buf []byte) ([]byte, error) {

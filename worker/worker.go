@@ -6,9 +6,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/go-spoe/spoe/frame"
-	"github.com/go-spoe/spoe/logger"
-	"github.com/go-spoe/spoe/request"
+	"github.com/go-spop/spop/frame"
+	"github.com/go-spop/spop/logger"
+	"github.com/go-spop/spop/request"
 )
 
 const (

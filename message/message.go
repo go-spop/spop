@@ -3,7 +3,7 @@ package message
 import (
 	"sync"
 
-	"github.com/go-spoe/spoe/payload/kv"
+	"github.com/go-spop/spop/payload/kv"
 )
 
 var messagePool = sync.Pool{

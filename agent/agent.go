@@ -3,9 +3,9 @@ package agent
 import (
 	"net"
 
-	"github.com/go-spoe/spoe/logger"
-	"github.com/go-spoe/spoe/request"
-	"github.com/go-spoe/spoe/worker"
+	"github.com/go-spop/spop/logger"
+	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/worker"
 )
 
 func New(handler func(*request.Request), logger logger.Logger) *Agent {

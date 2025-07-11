@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/go-spoe/spoe/frame"
+	"github.com/go-spop/spop/frame"
 )
 
 func (w *worker) sendAgentDisconnect(f *frame.Frame, statusCode uint32, message string) error {

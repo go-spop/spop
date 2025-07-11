@@ -6,7 +6,7 @@ import (
 	"net"
 	"reflect"
 
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/varint"
 )
 
 const (

@@ -3,8 +3,8 @@ package request
 import (
 	"sync"
 
-	"github.com/go-spoe/spoe/action"
-	"github.com/go-spoe/spoe/message"
+	"github.com/go-spop/spop/action"
+	"github.com/go-spop/spop/message"
 )
 
 var requestPool = sync.Pool{

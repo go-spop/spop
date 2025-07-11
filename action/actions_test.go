@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/go-spoe/spoe/action"
+	"github.com/go-spop/spop/action"
 )
 
 func BenchmarkActionsPool(b *testing.B) {

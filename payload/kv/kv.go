@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/go-spoe/spoe/typeddata"
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/typeddata"
+	"github.com/go-spop/spop/varint"
 )
 
 var kvPool = sync.Pool{

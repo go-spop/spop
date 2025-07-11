@@ -1,7 +1,7 @@
 package message
 
 import (
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/varint"
 )
 
 func (m *Messages) Decode(buf []byte) error {

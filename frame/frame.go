@@ -3,9 +3,9 @@ package frame
 import (
 	"sync"
 
-	"github.com/go-spoe/spoe/action"
-	"github.com/go-spoe/spoe/message"
-	"github.com/go-spoe/spoe/payload/kv"
+	"github.com/go-spop/spop/action"
+	"github.com/go-spop/spop/message"
+	"github.com/go-spop/spop/payload/kv"
 )
 
 type Type byte

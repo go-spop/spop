@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/go-spoe/spoe/frame"
-	"github.com/go-spoe/spoe/request"
+	"github.com/go-spop/spop/frame"
+	"github.com/go-spop/spop/request"
 )
 
 func (w *worker) processNotifyFrame(f *frame.Frame) {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/go-spoe/spoe/varint"
+	"github.com/go-spop/spop/varint"
 )
 
 func (f *Frame) Read(src io.Reader) error {
