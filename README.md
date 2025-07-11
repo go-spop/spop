@@ -1,6 +1,6 @@
-# Haproxy SPOE Golang Agent Library [![Go Report Card](https://goreportcard.com/badge/github.com/go-spop/spop)](https://goreportcard.com/report/github.com/go-spop/spop) ![](https://github.com/go-spop/spop/workflows/Test/badge.svg)
+# HAProxy SPOP Library [![Go Report Card](https://goreportcard.com/badge/github.com/go-spop/spop)](https://goreportcard.com/report/github.com/go-spop/spop) ![](https://github.com/go-spop/spop/workflows/Test/badge.svg)
 
-Terms from [Haproxy SPOE specification](https://www.haproxy.org/download/1.9/doc/SPOE.txt)
+Terms from the [HAProxy SPOE specification]:
 
 ```
 * SPOE : Stream Processing Offload Engine.
@@ -23,8 +23,7 @@ Terms from [Haproxy SPOE specification](https://www.haproxy.org/download/1.9/doc
     binary protocol described in this documentation.
 ```
 
-
-This library implements SPOA for Golang applications
+This library implements SPOP to implement a SPOA in go.
 
 ## Install
 
@@ -34,27 +33,28 @@ go get -u github.com/go-spop/spop
 
 ## Example
 
-Example from Section 2.5 [SPOE specification](https://www.haproxy.org/download/1.9/doc/SPOE.txt) describes a simple IP reputation service.
+Section 2.8 of the [HAProxy SPOE specification] describes a simple IP reputation service:
 
 > Here is a simple but complete example that sends client-ip address to a ip
   reputation service. This service can set the variable "ip_score" which is an
   integer between 0 and 100, indicating its reputation (100 means totally safe
   and 0 a blacklisted IP with no doubt).
 
-Golang backend application for this example
+Example implementation in go:
 
 ```go
 package main
 
 import (
-	"github.com/go-spop/spop/action"
-	"github.com/go-spop/spop/agent"
-	"github.com/go-spop/spop/request"
-        "github.com/go-spop/spop/logger"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+
+    "github.com/go-spop/spop/action"
+    "github.com/go-spop/spop/agent"
+    "github.com/go-spop/spop/request"
+    "github.com/go-spop/spop/logger"
 )
 
 func main() {
@@ -139,7 +139,7 @@ mes, err := request.Messages.GetByIndex(0)
 
 ### Message
 
-Represents one message, sent by Haproxy
+Represents one message, sent by HAProxy
 
 Message has two fields
 - Name string
@@ -149,7 +149,7 @@ KV contains key-value data of message
 
 ### Actions
 
-Actions is used for sending a response to Haproxy
+Actions is used for sending a response to HAProxy
 
 #### SetVar(scope Scope, name string, value interface{})
 
@@ -176,7 +176,7 @@ request.Actions.UnsetVar(action.ScopeSession, "ip_score")
 
 ### KV (key-value)
 
-Contains message key-value data sent by Haproxy
+Contains message key-value data sent by HAProxy
 
 #### Get(key string) (interface{}, bool)
 
@@ -185,3 +185,5 @@ Returns value by name. If key doesn't exist, last returned value will be set to 
 ```
 ipValue, ok := message.KV.Get("ip")
 ```
+
+[HAProxy SPOE specification]: https://www.haproxy.org/download/2.8/doc/SPOE.txt

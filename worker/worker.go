@@ -63,10 +63,10 @@ func (w *worker) run() error {
 		}
 
 		switch f.Type {
-		case frame.TypeHaproxyHello:
+		case frame.TypeHAProxyHello:
 
 			if w.ready {
-				return fmt.Errorf("worker already ready, but got HaproxyHello frame")
+				return fmt.Errorf("worker already ready, but got HAProxyHello frame")
 			}
 
 			if err := w.sendAgentHello(f); err != nil {
@@ -84,9 +84,9 @@ func (w *worker) run() error {
 			w.ready = true
 			continue
 
-		case frame.TypeHaproxyDisconnect:
+		case frame.TypeHAProxyDisconnect:
 			if !w.ready {
-				return fmt.Errorf("worker not ready, but got HaproxyDisconnect frame")
+				return fmt.Errorf("worker not ready, but got HAProxyDisconnect frame")
 			}
 
 			if err := w.sendAgentDisconnect(f, 0, "connection closed by server"); err != nil {

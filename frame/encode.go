@@ -27,7 +27,7 @@ func (f *Frame) Encode(dest io.Writer) (n int, err error) {
 	var payload []byte
 
 	switch f.Type {
-	case TypeAgentHello, TypeAgentDisconnect, TypeHaproxyHello, TypeHaproxyDisconnect:
+	case TypeAgentHello, TypeAgentDisconnect, TypeHAProxyHello, TypeHAProxyDisconnect:
 		payload, err = f.KV.Bytes()
 		if err != nil {
 			return

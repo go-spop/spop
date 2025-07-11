@@ -27,7 +27,7 @@ func (f *Frame) Read(src io.Reader) error {
 	// that way spurious connections (say someone calling curl on port) won't cause it to
 	// allocate gigabytes of RAM
 	switch f.Type {
-	case TypeHaproxyHello, TypeHaproxyDisconnect, TypeNotify, TypeAgentHello, TypeAgentDisconnect, TypeAgentAck:
+	case TypeHAProxyHello, TypeHAProxyDisconnect, TypeNotify, TypeAgentHello, TypeAgentDisconnect, TypeAgentAck:
 	default:
 		return fmt.Errorf("unexpected frame type %d", f.Type)
 	}
@@ -53,7 +53,7 @@ func (f *Frame) Read(src io.Reader) error {
 	buf = buf[n:]
 
 	switch f.Type {
-	case TypeHaproxyHello, TypeHaproxyDisconnect:
+	case TypeHAProxyHello, TypeHAProxyDisconnect:
 		if err = f.KV.Unmarshal(buf); err != nil {
 			return err
 		}

@@ -21,11 +21,11 @@ func NewClient(conn net.Conn) Client {
 	return Client{conn: conn, reader: bufio.NewReader(conn)}
 }
 
-// Init initialize the client by sending the HaproxyHello frame
+// Init initialize the client by sending the HAProxyHello frame
 func (c *Client) Init() error {
 	f := frame.AcquireFrame()
 	defer frame.ReleaseFrame(f)
-	f.Type = frame.TypeHaproxyHello
+	f.Type = frame.TypeHAProxyHello
 	f.StreamID = 0
 	f.FrameID = 0
 	f.KV.Add("supported-versions", "2")
@@ -89,11 +89,11 @@ func (c *Client) Notify() error {
 	return nil
 }
 
-// Stop the client by sending HaproxyDisconnect frame
+// Stop the client by sending HAProxyDisconnect frame
 func (c *Client) Stop() error {
 	f := frame.AcquireFrame()
 	defer frame.ReleaseFrame(f)
-	f.Type = frame.TypeHaproxyDisconnect
+	f.Type = frame.TypeHAProxyDisconnect
 	f.StreamID = 0
 	f.FrameID = 0
 	f.KV.Add("status-code", uint32(0))

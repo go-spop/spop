@@ -12,8 +12,8 @@ type Type byte
 
 const (
 	TypeUnset             Type = 0x00
-	TypeHaproxyHello      Type = 0x01
-	TypeHaproxyDisconnect Type = 0x02
+	TypeHAProxyHello      Type = 0x01
+	TypeHAProxyDisconnect Type = 0x02
 	TypeNotify            Type = 0x03
 	TypeAgentHello        Type = 0x65
 	TypeAgentDisconnect   Type = 0x66
