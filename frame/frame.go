@@ -21,7 +21,7 @@ const (
 )
 
 var framePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return NewFrame()
 	},
 }

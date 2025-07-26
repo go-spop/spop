@@ -22,10 +22,10 @@ type Action struct {
 	Type  Type
 	Scope Scope
 	Name  string
-	Value interface{}
+	Value any
 }
 
-func NewSetVar(scope Scope, name string, value interface{}) Action {
+func NewSetVar(scope Scope, name string, value any) Action {
 	return Action{
 		Type:  TypeSetVar,
 		Scope: scope,

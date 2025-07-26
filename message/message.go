@@ -7,7 +7,7 @@ import (
 )
 
 var messagePool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return newMessage()
 	},
 }

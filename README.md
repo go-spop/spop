@@ -53,8 +53,8 @@ import (
 
     "github.com/go-spop/spop/action"
     "github.com/go-spop/spop/agent"
-    "github.com/go-spop/spop/request"
     "github.com/go-spop/spop/logger"
+    "github.com/go-spop/spop/request"
 )
 
 func main() {
@@ -151,7 +151,7 @@ KV contains key-value data of message
 
 Actions is used for sending a response to HAProxy
 
-#### SetVar(scope Scope, name string, value interface{})
+#### SetVar(scope Scope, name string, value any)
 
 Set variable with `name` to `value` in specific `scope` (see bellow)
 
@@ -178,7 +178,7 @@ request.Actions.UnsetVar(action.ScopeSession, "ip_score")
 
 Contains message key-value data sent by HAProxy
 
-#### Get(key string) (interface{}, bool)
+#### Get(key string) (any, bool)
 
 Returns value by name. If key doesn't exist, last returned value will be set to False
 

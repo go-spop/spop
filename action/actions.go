@@ -2,7 +2,7 @@ package action
 
 type Actions []Action
 
-func (actions *Actions) SetVar(scope Scope, name string, value interface{}) {
+func (actions *Actions) SetVar(scope Scope, name string, value any) {
 	*actions = append(*actions, NewSetVar(scope, name, value))
 }
 

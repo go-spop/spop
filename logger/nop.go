@@ -10,4 +10,4 @@ type Nop struct{}
 // NewNop returns a Nop logger.
 func NewNop() *Nop { return nop }
 
-func (*Nop) Errorf(_ string, _ ...interface{}) {}
+func (*Nop) Errorf(_ string, _ ...any) {}
