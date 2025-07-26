@@ -8,7 +8,7 @@ var _ Logger = Channel{}
 // over a channel.
 type LogMessage struct {
 	format string
-	args   []interface{}
+	args   []any
 }
 
 // Channel is Logger sensing messages to be logged over a channel.
@@ -25,7 +25,7 @@ func NewChannel(ch chan<- LogMessage) Channel {
 	return Channel{ch: ch}
 }
 
-func (c Channel) Errorf(format string, args ...interface{}) {
+func (c Channel) Errorf(format string, args ...any) {
 	c.ch <- LogMessage{
 		format: format,
 		args:   args,

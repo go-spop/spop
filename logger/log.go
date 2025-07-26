@@ -12,7 +12,7 @@ type Log struct {
 // NewLog creates new Log using l for logging.
 func NewLog(l *log.Logger) *Log { return &Log{l: l} }
 
-func (l *Log) Errorf(format string, args ...interface{}) {
+func (l *Log) Errorf(format string, args ...any) {
 	l.l.Printf("error: "+format, args...)
 }
 
@@ -27,6 +27,6 @@ var defaultLog = &DefaultLog{}
 // package.
 func NewDefaultLog() *DefaultLog { return defaultLog }
 
-func (*DefaultLog) Errorf(format string, args ...interface{}) {
+func (*DefaultLog) Errorf(format string, args ...any) {
 	log.Printf("error: "+format, args...)
 }

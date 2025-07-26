@@ -9,7 +9,7 @@ import (
 )
 
 var kvPool = sync.Pool{
-	New: func() interface{} {
+	New: func() any {
 		return NewKV()
 	},
 }
@@ -25,7 +25,7 @@ func ReleaseKV(kv *KV) {
 
 type Item struct {
 	Name  string
-	Value interface{}
+	Value any
 }
 
 type KV struct {
@@ -50,11 +50,11 @@ func (kv *KV) Reset() {
 	kv.m = make([]Item, 0)
 }
 
-func (kv *KV) Add(key string, value interface{}) {
+func (kv *KV) Add(key string, value any) {
 	kv.m = append(kv.m, Item{key, value})
 }
 
-func (kv *KV) Get(key string) (interface{}, bool) {
+func (kv *KV) Get(key string) (any, bool) {
 	for i := range kv.m {
 		if kv.m[i].Name == key {
 			return kv.m[i].Value, true
@@ -85,7 +85,7 @@ func (kv *KV) Bytes() ([]byte, error) {
 
 func (kv *KV) Unmarshal(buf []byte) error {
 	var key string
-	var value interface{}
+	var value any
 	var n int
 	var err error
 	var keyLen uint64
@@ -118,7 +118,7 @@ func (kv *KV) Unmarshal(buf []byte) error {
 
 func (kv *KV) UnmarshalNB(buf []byte, count int) (int, error) {
 	var key string
-	var value interface{}
+	var value any
 	var n int
 	var err error
 	var keyLen uint64

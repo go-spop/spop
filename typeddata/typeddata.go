@@ -40,7 +40,7 @@ var ErrDecodingBufferTooSmall = errors.New("decoding buffer too small")
 
 // Encode variable to TypedData value
 // returns filled buffer, count of bytes and error
-func Encode(data interface{}, buf []byte) ([]byte, int, error) {
+func Encode(data any, buf []byte) ([]byte, int, error) {
 	var n int
 
 	switch v := data.(type) {
@@ -126,7 +126,7 @@ func Encode(data interface{}, buf []byte) ([]byte, int, error) {
 
 // Decode TypedData value
 // Returns decoded variable, bytes count and error
-func Decode(buf []byte) (data interface{}, n int, err error) {
+func Decode(buf []byte) (data any, n int, err error) {
 	if len(buf) == 0 {
 		err = ErrEmptyBuffer
 		return
