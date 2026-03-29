@@ -186,11 +186,19 @@ func Decode(buf []byte) (data any, n int, err error) {
 		return
 
 	case TypeIPv4:
+		if len(buf) < 4 {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
 		data = net.IP(buf[:4])
 		n += 4
 		return
 
 	case TypeIPv6:
+		if len(buf) < 16 {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
 		data = net.IP(buf[:16])
 		n += 16
 		return
