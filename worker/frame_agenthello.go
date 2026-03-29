@@ -29,7 +29,9 @@ func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
 		return fmt.Errorf("marshaling error: %v", err)
 	}
 
+	w.connMu.Lock()
 	n, err = w.conn.Write(buf.Bytes())
+	w.connMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("error write to connection: %v", err)
 	}

@@ -26,7 +26,9 @@ func (w *worker) sendAgentDisconnect(f *frame.Frame, statusCode uint32, message 
 		return err
 	}
 
+	w.connMu.Lock()
 	n, err = w.conn.Write(buf.Bytes())
+	w.connMu.Unlock()
 	if err != nil {
 		return err
 	}

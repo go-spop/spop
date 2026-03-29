@@ -29,7 +29,9 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	ackFrame.FrameID = f.FrameID
 	ackFrame.Actions = req.Actions
 
+	w.connMu.Lock()
 	err := w.writeFrame(ackFrame)
+	w.connMu.Unlock()
 	if err != nil {
 		w.logger.Errorf("ack frame write failed: %v", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
@@ -30,6 +31,7 @@ func Handle(conn net.Conn, handler func(*request.Request), logger logger.Logger)
 
 type worker struct {
 	conn     net.Conn
+	connMu   sync.Mutex
 	ready    bool
 	engineID string
 	handler  func(*request.Request)
