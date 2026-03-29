@@ -17,7 +17,7 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	req.StreamID = f.StreamID
 	req.FrameID = f.FrameID
 	req.EngineID = w.engineID
-	req.Messages = f.Messages
+	req.Messages, f.Messages = f.Messages, req.Messages
 
 	w.handler(req)
 
