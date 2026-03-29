@@ -68,14 +68,20 @@ func (f *Frame) Read(src io.Reader) error {
 		if err = f.KV.Unmarshal(buf); err != nil {
 			return err
 		}
-		if v, ok := f.KV.Get("healthcheck"); ok && v.(bool) {
-			f.Healthcheck = true
+		if v, ok := f.KV.Get("healthcheck"); ok {
+			if b, ok := v.(bool); ok {
+				f.Healthcheck = b
+			}
 		}
 		if v, ok := f.KV.Get("max-frame-size"); ok {
-			f.MaxFrameSize = v.(uint32)
+			if mfs, ok := v.(uint32); ok {
+				f.MaxFrameSize = mfs
+			}
 		}
 		if v, ok := f.KV.Get("engine-id"); ok {
-			f.EngineID = v.(string)
+			if eid, ok := v.(string); ok {
+				f.EngineID = eid
+			}
 		}
 
 	case TypeNotify:
