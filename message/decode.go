@@ -25,6 +25,9 @@ func (m *Messages) Decode(buf []byte) error {
 		message.Name = string(buf[:messageNameLen])
 		buf = buf[messageNameLen:]
 
+		if len(buf) == 0 {
+			return fmt.Errorf("error read message arg count: buffer too small")
+		}
 		nbArgs := int(buf[0])
 		buf = buf[1:]
 
