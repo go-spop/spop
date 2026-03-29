@@ -92,7 +92,7 @@ func (w *worker) run() error {
 				return fmt.Errorf("worker not ready, but got HAProxyDisconnect frame")
 			}
 
-			if err := w.sendAgentDisconnect(f, 0, "connection closed by server"); err != nil {
+			if err := w.sendAgentDisconnect(0, "connection closed by server"); err != nil {
 				return fmt.Errorf("error send AgentDisconnect frame: %v", err)
 			}
 			frame.ReleaseFrame(f)
