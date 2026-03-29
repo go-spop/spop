@@ -119,6 +119,19 @@ func Encode(data any, buf []byte) ([]byte, int, error) {
 		buf = append(buf, b[:i]...)
 		buf = append(buf, v...)
 		return buf, n, nil
+
+	case net.IP:
+		if ip4 := v.To4(); ip4 != nil {
+			buf = append(buf, TypeIPv4)
+			buf = append(buf, ip4...)
+			return buf, 5, nil
+		}
+		if ip6 := v.To16(); ip6 != nil {
+			buf = append(buf, TypeIPv6)
+			buf = append(buf, ip6...)
+			return buf, 17, nil
+		}
+		return nil, 0, fmt.Errorf("invalid IP address")
 	}
 
 	return nil, 0, fmt.Errorf("type not supported for encode to TypedData: %s", reflect.TypeOf(data).String())
