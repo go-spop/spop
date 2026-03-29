@@ -147,24 +147,40 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = int32(i)
 		return
 
 	case TypeUInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = uint32(i)
 		return
 
 	case TypeInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = int64(i)
 		return
 
 	case TypeUInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = uint64(i)
 		return
@@ -181,6 +197,10 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeString:
 		sLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += i
 		buf = buf[i:]
 		if len(buf) < int(sLen) {
@@ -193,6 +213,10 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeBinary:
 		dataLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += i
 		buf = buf[i:]
 		if len(buf) < int(dataLen) {

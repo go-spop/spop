@@ -1,6 +1,8 @@
 package message
 
 import (
+	"fmt"
+
 	"github.com/go-spop/spop/varint"
 )
 
@@ -13,7 +15,13 @@ func (m *Messages) Decode(buf []byte) error {
 		message := AcquireMessage()
 
 		messageNameLen, n := varint.Uvarint(buf)
+		if n < 0 {
+			return fmt.Errorf("error read message name length: %w", varint.ErrTruncated)
+		}
 		buf = buf[n:]
+		if len(buf) < int(messageNameLen) {
+			return fmt.Errorf("error read message name: buffer too small")
+		}
 		message.Name = string(buf[:messageNameLen])
 		buf = buf[messageNameLen:]
 

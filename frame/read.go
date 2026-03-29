@@ -8,6 +8,11 @@ import (
 	"github.com/go-spop/spop/varint"
 )
 
+var (
+	errFrameTruncatedStreamID = fmt.Errorf("error read stream-id: %w", varint.ErrTruncated)
+	errFrameTruncatedFrameID  = fmt.Errorf("error read frame-id: %w", varint.ErrTruncated)
+)
+
 func (f *Frame) Read(src io.Reader) error {
 	var n int
 	var err error
@@ -47,9 +52,15 @@ func (f *Frame) Read(src io.Reader) error {
 	buf = buf[4:]
 
 	f.StreamID, n = varint.Uvarint(buf)
+	if n < 0 {
+		return errFrameTruncatedStreamID
+	}
 	buf = buf[n:]
 
 	f.FrameID, n = varint.Uvarint(buf)
+	if n < 0 {
+		return errFrameTruncatedFrameID
+	}
 	buf = buf[n:]
 
 	switch f.Type {
