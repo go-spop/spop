@@ -40,7 +40,17 @@ func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
 	}
 
 	agentHello.KV.Add("version", spec.Version20)
-	agentHello.KV.Add("max-frame-size", haproxyHello.MaxFrameSize)
+
+	maxFrameSize := haproxyHello.MaxFrameSize
+	if maxFrameSize == 0 || maxFrameSize > spec.DefaultMaxFrameSize {
+		maxFrameSize = spec.DefaultMaxFrameSize
+	}
+	if maxFrameSize < spec.MinFrameSize {
+		return fmt.Errorf("max-frame-size %d below minimum %d", maxFrameSize, spec.MinFrameSize)
+	}
+	w.maxFrameSize = maxFrameSize
+
+	agentHello.KV.Add("max-frame-size", maxFrameSize)
 	agentHello.KV.Add("capabilities", capabilities)
 
 	buf := bytes.NewBuffer(make([]byte, 0))

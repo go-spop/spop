@@ -44,6 +44,12 @@ func (w *worker) writeFrame(f *frame.Frame) error {
 		return fmt.Errorf("cannot marshal frame: %w", err)
 	}
 
+	// The 4-byte length prefix is not counted toward the frame size limit.
+	frameSize := uint32(buf.Len() - 4)
+	if w.maxFrameSize > 0 && frameSize > w.maxFrameSize {
+		return fmt.Errorf("frame size %d exceeds negotiated max-frame-size %d", frameSize, w.maxFrameSize)
+	}
+
 	n, err = w.conn.Write(buf.Bytes())
 	if err != nil {
 		return fmt.Errorf("cannot write frame to connection: %w", err)

@@ -30,11 +30,12 @@ func Handle(conn net.Conn, handler func(*request.Request), logger logger.Logger)
 }
 
 type worker struct {
-	conn     net.Conn
-	connMu   sync.Mutex
-	ready    bool
-	engineID string
-	handler  func(*request.Request)
+	conn         net.Conn
+	connMu       sync.Mutex
+	ready        bool
+	engineID     string
+	maxFrameSize uint32
+	handler      func(*request.Request)
 
 	logger logger.Logger
 }
