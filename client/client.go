@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/go-spop/spop/frame"
+	"github.com/go-spop/spop/internal/spec"
 )
 
 // Client is a simple client for spop protocol, this should only be used for testing purpose
@@ -28,7 +30,7 @@ func (c *Client) Init() error {
 	f.Type = frame.TypeHAProxyHello
 	f.StreamID = 0
 	f.FrameID = 0
-	f.KV.Add("supported-versions", "2")
+	f.KV.Add("supported-versions", strings.Join(spec.SupportedVersions, ", "))
 	f.KV.Add("max-frame-size", uint32(16*1024))
 	f.KV.Add("capabilities", "")
 

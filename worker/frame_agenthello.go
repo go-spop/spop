@@ -3,8 +3,10 @@ package worker
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/go-spop/spop/frame"
+	"github.com/go-spop/spop/internal/spec"
 )
 
 func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
@@ -18,7 +20,26 @@ func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
 	agentHello.FrameID = haproxyHello.FrameID
 	agentHello.StreamID = haproxyHello.StreamID
 
-	agentHello.KV.Add("version", "2.0")
+	supportedVersions, ok := haproxyHello.KV.Get("supported-versions")
+	if !ok {
+		return fmt.Errorf("HAProxy hello missing supported-versions")
+	}
+	sv, ok := supportedVersions.(string)
+	if !ok {
+		return fmt.Errorf("supported-versions is not a string")
+	}
+	versionSupported := false
+	for _, v := range strings.Split(sv, ",") {
+		if strings.TrimSpace(v) == spec.Version20 {
+			versionSupported = true
+			break
+		}
+	}
+	if !versionSupported {
+		return fmt.Errorf("unsupported versions: %s", sv)
+	}
+
+	agentHello.KV.Add("version", spec.Version20)
 	agentHello.KV.Add("max-frame-size", haproxyHello.MaxFrameSize)
 	agentHello.KV.Add("capabilities", capabilities)
 
