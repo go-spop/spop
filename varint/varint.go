@@ -16,6 +16,11 @@ Variable-length integer (varint) are encoded using Peers encoding:
 
 */
 
+import "errors"
+
+// ErrTruncated is returned when the buffer is too small to decode a varint.
+var ErrTruncated = errors.New("varint: buffer truncated")
+
 func PutUvarint(buf []byte, n uint64) int {
 	var p int
 

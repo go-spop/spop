@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync"
 
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
@@ -29,10 +30,12 @@ func Handle(conn net.Conn, handler func(*request.Request), logger logger.Logger)
 }
 
 type worker struct {
-	conn     net.Conn
-	ready    bool
-	engineID string
-	handler  func(*request.Request)
+	conn         net.Conn
+	connMu       sync.Mutex
+	ready        bool
+	engineID     string
+	maxFrameSize uint32
+	handler      func(*request.Request)
 
 	logger logger.Logger
 }
@@ -89,7 +92,7 @@ func (w *worker) run() error {
 				return fmt.Errorf("worker not ready, but got HAProxyDisconnect frame")
 			}
 
-			if err := w.sendAgentDisconnect(f, 0, "connection closed by server"); err != nil {
+			if err := w.sendAgentDisconnect(0, "connection closed by server"); err != nil {
 				return fmt.Errorf("error send AgentDisconnect frame: %v", err)
 			}
 			frame.ReleaseFrame(f)

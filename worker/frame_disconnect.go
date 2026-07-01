@@ -7,7 +7,7 @@ import (
 	"github.com/go-spop/spop/frame"
 )
 
-func (w *worker) sendAgentDisconnect(f *frame.Frame, statusCode uint32, message string) error {
+func (w *worker) sendAgentDisconnect(statusCode uint32, message string) error {
 	var frameSize, n int
 	var err error
 
@@ -15,8 +15,8 @@ func (w *worker) sendAgentDisconnect(f *frame.Frame, statusCode uint32, message 
 	defer frame.ReleaseFrame(agentDisconnectFrame)
 
 	agentDisconnectFrame.Type = frame.TypeAgentDisconnect
-	agentDisconnectFrame.FrameID = f.FrameID
-	agentDisconnectFrame.StreamID = f.StreamID
+	agentDisconnectFrame.FrameID = 0
+	agentDisconnectFrame.StreamID = 0
 	agentDisconnectFrame.KV.Add("status-code", statusCode)
 	agentDisconnectFrame.KV.Add("message", message)
 
@@ -26,7 +26,9 @@ func (w *worker) sendAgentDisconnect(f *frame.Frame, statusCode uint32, message 
 		return err
 	}
 
+	w.connMu.Lock()
 	n, err = w.conn.Write(buf.Bytes())
+	w.connMu.Unlock()
 	if err != nil {
 		return err
 	}

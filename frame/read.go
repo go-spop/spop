@@ -8,15 +8,19 @@ import (
 	"github.com/go-spop/spop/varint"
 )
 
-func (f *Frame) Read(src io.Reader) error {
-	var n int
-	var err error
+var (
+	errFrameTruncatedStreamID = fmt.Errorf("error read stream-id: %w", varint.ErrTruncated)
+	errFrameTruncatedFrameID  = fmt.Errorf("error read frame-id: %w", varint.ErrTruncated)
+)
 
-	n, err = io.ReadFull(src, f.tmp[:])
-	if err != nil {
+func (f *Frame) Read(src io.Reader) (err error) {
+	var n int
+
+	if n, err = io.ReadFull(src, f.tmp[:]); err != nil {
 		if err == io.EOF {
 			return err
 		}
+
 		return fmt.Errorf("error read frame size, %v", err)
 	}
 
@@ -34,8 +38,7 @@ func (f *Frame) Read(src io.Reader) error {
 
 	buf := make([]byte, f.Len-1)
 
-	n, err = io.ReadFull(src, buf)
-	if err != nil {
+	if n, err = io.ReadFull(src, buf); err != nil {
 		return fmt.Errorf("error read frame, %v", err)
 	}
 
@@ -44,35 +47,54 @@ func (f *Frame) Read(src io.Reader) error {
 	}
 
 	f.Flags = binary.BigEndian.Uint32(buf[0:4])
+
 	buf = buf[4:]
 
 	f.StreamID, n = varint.Uvarint(buf)
+
+	if n < 0 {
+		return errFrameTruncatedStreamID
+	}
+
 	buf = buf[n:]
 
 	f.FrameID, n = varint.Uvarint(buf)
+
+	if n < 0 {
+		return errFrameTruncatedFrameID
+	}
+
 	buf = buf[n:]
 
 	switch f.Type {
-	case TypeHAProxyHello, TypeHAProxyDisconnect:
+	case TypeHAProxyHello, TypeHAProxyDisconnect, TypeAgentHello, TypeAgentDisconnect:
 		if err = f.KV.Unmarshal(buf); err != nil {
 			return err
 		}
-		if v, ok := f.KV.Get("healthcheck"); ok && v.(bool) {
-			f.Healthcheck = true
-		}
-		if v, ok := f.KV.Get("max-frame-size"); ok {
-			f.MaxFrameSize = v.(uint32)
-		}
-		if v, ok := f.KV.Get("engine-id"); ok {
-			f.EngineID = v.(string)
+
+		if v, ok := f.KV.Get("healthcheck"); ok {
+			if b, ok := v.(bool); ok {
+				f.Healthcheck = b
+			}
 		}
 
+		if v, ok := f.KV.Get("max-frame-size"); ok {
+			if mfs, ok := v.(uint32); ok {
+				f.MaxFrameSize = mfs
+			}
+		}
+
+		if v, ok := f.KV.Get("engine-id"); ok {
+			if eid, ok := v.(string); ok {
+				f.EngineID = eid
+			}
+		}
 	case TypeNotify:
-		err = f.Messages.Decode(buf)
-		if err != nil {
+		if err = f.Messages.Decode(buf); err != nil {
 			return err
 		}
-
+	case TypeAgentAck:
+		// Actions payload; not decoded.
 	default:
 		return fmt.Errorf("unexpected frame type %d", f.Type)
 	}

@@ -8,6 +8,10 @@ import (
 	"github.com/go-spop/spop/varint"
 )
 
+var (
+	errKVKeyLenTruncated = fmt.Errorf("error unmarshal KV key length: %w", varint.ErrTruncated)
+)
+
 var kvPool = sync.Pool{
 	New: func() any {
 		return NewKV()
@@ -96,6 +100,9 @@ func (kv *KV) Unmarshal(buf []byte) error {
 		}
 
 		keyLen, n = varint.Uvarint(buf)
+		if n < 0 {
+			return errKVKeyLenTruncated
+		}
 		buf = buf[n:]
 		if len(buf) < int(keyLen) {
 			return fmt.Errorf("error unmarshal KV, wrong buf len. Expect %d, got %d", keyLen, len(buf))
@@ -131,6 +138,9 @@ func (kv *KV) UnmarshalNB(buf []byte, count int) (int, error) {
 		}
 
 		keyLen, n = varint.Uvarint(buf)
+		if n < 0 {
+			return readBytes, errKVKeyLenTruncated
+		}
 		buf = buf[n:]
 		readBytes += n
 		if len(buf) < int(keyLen) {

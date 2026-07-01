@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strings"
 
 	"github.com/go-spop/spop/frame"
+	"github.com/go-spop/spop/internal/spec"
 )
 
 // Client is a simple client for spop protocol, this should only be used for testing purpose
@@ -22,24 +24,30 @@ func NewClient(conn net.Conn) Client {
 }
 
 // Init initialize the client by sending the HAProxyHello frame
-func (c *Client) Init() error {
+func (c *Client) Init() (err error) {
 	f := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(f)
+
 	f.Type = frame.TypeHAProxyHello
 	f.StreamID = 0
 	f.FrameID = 0
-	f.KV.Add("supported-versions", "2")
+
+	f.KV.Add("supported-versions", strings.Join(spec.SupportedVersions, ", "))
 	f.KV.Add("max-frame-size", uint32(16*1024))
 	f.KV.Add("capabilities", "")
 
-	err := c.send(f)
-	if err != nil {
+	if err = c.send(f); err != nil {
 		return err
 	}
 
 	responseFrame := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+
+	if err = responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error reading AgentHello: %w", err)
+	}
 
 	switch responseFrame.Type {
 	case frame.TypeAgentHello:
@@ -51,7 +59,6 @@ func (c *Client) Init() error {
 	}
 
 	return nil
-
 }
 
 func (c *Client) send(f *frame.Frame) error {
@@ -71,43 +78,54 @@ func (c *Client) send(f *frame.Frame) error {
 }
 
 // Notify send an empty Notify frame
-func (c *Client) Notify() error {
+func (c *Client) Notify() (err error) {
 	f := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(f)
+
 	f.Type = frame.TypeNotify
 	f.StreamID = 1
 	f.FrameID = 1
 
-	err := c.send(f)
-	if err != nil {
+	if err = c.send(f); err != nil {
 		return err
 	}
 
 	responseFrame := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+
+	if err = responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error reading AgentAck: %w", err)
+	}
+
 	return nil
 }
 
 // Stop the client by sending HAProxyDisconnect frame
-func (c *Client) Stop() error {
+func (c *Client) Stop() (err error) {
 	f := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(f)
+
 	f.Type = frame.TypeHAProxyDisconnect
 	f.StreamID = 0
 	f.FrameID = 0
+
 	f.KV.Add("status-code", uint32(0))
 	f.KV.Add("message", "normal")
 
-	err := c.send(f)
-	if err != nil {
+	if err = c.send(f); err != nil {
 		return err
 	}
 
 	responseFrame := frame.AcquireFrame()
+
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+
+	if err = responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error reading AgentDisconnect: %w", err)
+	}
 
 	return nil
-
 }

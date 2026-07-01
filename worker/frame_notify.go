@@ -17,7 +17,7 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	req.StreamID = f.StreamID
 	req.FrameID = f.FrameID
 	req.EngineID = w.engineID
-	req.Messages = f.Messages
+	req.Messages, f.Messages = f.Messages, req.Messages
 
 	w.handler(req)
 
@@ -29,7 +29,9 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	ackFrame.FrameID = f.FrameID
 	ackFrame.Actions = req.Actions
 
+	w.connMu.Lock()
 	err := w.writeFrame(ackFrame)
+	w.connMu.Unlock()
 	if err != nil {
 		w.logger.Errorf("ack frame write failed: %v", err)
 	}
@@ -40,6 +42,12 @@ func (w *worker) writeFrame(f *frame.Frame) error {
 	n, err := f.Encode(buf)
 	if err != nil {
 		return fmt.Errorf("cannot marshal frame: %w", err)
+	}
+
+	// The 4-byte length prefix is not counted toward the frame size limit.
+	frameSize := uint32(buf.Len() - 4)
+	if w.maxFrameSize > 0 && frameSize > w.maxFrameSize {
+		return fmt.Errorf("frame size %d exceeds negotiated max-frame-size %d", frameSize, w.maxFrameSize)
 	}
 
 	n, err = w.conn.Write(buf.Bytes())

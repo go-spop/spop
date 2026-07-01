@@ -119,6 +119,19 @@ func Encode(data any, buf []byte) ([]byte, int, error) {
 		buf = append(buf, b[:i]...)
 		buf = append(buf, v...)
 		return buf, n, nil
+
+	case net.IP:
+		if ip4 := v.To4(); ip4 != nil {
+			buf = append(buf, TypeIPv4)
+			buf = append(buf, ip4...)
+			return buf, 5, nil
+		}
+		if ip6 := v.To16(); ip6 != nil {
+			buf = append(buf, TypeIPv6)
+			buf = append(buf, ip6...)
+			return buf, 17, nil
+		}
+		return nil, 0, fmt.Errorf("invalid IP address")
 	}
 
 	return nil, 0, fmt.Errorf("type not supported for encode to TypedData: %s", reflect.TypeOf(data).String())
@@ -147,40 +160,68 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = int32(i)
 		return
 
 	case TypeUInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = uint32(i)
 		return
 
 	case TypeInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = int64(i)
 		return
 
 	case TypeUInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += l
 		data = uint64(i)
 		return
 
 	case TypeIPv4:
+		if len(buf) < 4 {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
 		data = net.IP(buf[:4])
 		n += 4
 		return
 
 	case TypeIPv6:
+		if len(buf) < 16 {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
 		data = net.IP(buf[:16])
 		n += 16
 		return
 
 	case TypeString:
 		sLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += i
 		buf = buf[i:]
 		if len(buf) < int(sLen) {
@@ -193,6 +234,10 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeBinary:
 		dataLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = varint.ErrTruncated
+			return
+		}
 		n += i
 		buf = buf[i:]
 		if len(buf) < int(dataLen) {
