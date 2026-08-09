@@ -96,8 +96,11 @@ func (kv *KV) Unmarshal(buf []byte) error {
 		}
 
 		keyLen, n = varint.Uvarint(buf)
+		if n < 0 {
+			return fmt.Errorf("error unmarshal KV, truncated key length varint")
+		}
 		buf = buf[n:]
-		if len(buf) < int(keyLen) {
+		if uint64(len(buf)) < keyLen {
 			return fmt.Errorf("error unmarshal KV, wrong buf len. Expect %d, got %d", keyLen, len(buf))
 		}
 
@@ -131,9 +134,12 @@ func (kv *KV) UnmarshalNB(buf []byte, count int) (int, error) {
 		}
 
 		keyLen, n = varint.Uvarint(buf)
+		if n < 0 {
+			return readBytes, fmt.Errorf("error unmarshal KV, truncated key length varint")
+		}
 		buf = buf[n:]
 		readBytes += n
-		if len(buf) < int(keyLen) {
+		if uint64(len(buf)) < keyLen {
 			return readBytes, fmt.Errorf("error unmarshal KV, wrong buf len. Expect %d, got %d", keyLen, len(buf))
 		}
 

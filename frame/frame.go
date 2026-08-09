@@ -10,6 +10,15 @@ import (
 
 type Type byte
 
+// MaxFrameSize bounds the frame length a peer may declare. SPOP negotiates the
+// working maximum during the HELLO handshake; this ceiling exists so that an
+// unvalidated length prefix can never size an allocation.
+const MaxFrameSize = 1 << 20
+
+// minFrameLen is the smallest legal frame body: the FRAME-TYPE byte plus the
+// 4-byte FLAGS field, before STREAM-ID and FRAME-ID.
+const minFrameLen = 5
+
 const (
 	TypeUnset             Type = 0x00
 	TypeHAProxyHello      Type = 0x01
