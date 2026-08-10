@@ -2,8 +2,10 @@ package engine
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"testing"
 	"time"
@@ -163,5 +165,124 @@ func TestConn_MaxFrameSize_roundTrips(t *testing.T) {
 
 	if got := c.MaxFrameSize(); got != 16384 {
 		t.Fatalf("expected 16384, got %d", got)
+	}
+}
+
+// A peer that never reads must not pin a writer forever. net.Pipe is
+// unbuffered, so a Write with no reader blocks until the deadline fires -- an
+// exact model of a wedged peer.
+func TestConn_WritePayload_honoursTheWriteTimeout(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	c := NewConn(server)
+	c.SetWriteTimeout(50 * time.Millisecond)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.WriteFrame([]byte{0x00, 0x00, 0x00, 0x01, 0x65})
+	}()
+
+	select {
+	case err := <-done:
+		if !errors.Is(err, os.ErrDeadlineExceeded) {
+			t.Fatalf("expected a deadline error, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the write never returned; the timeout was not applied")
+	}
+}
+
+// Zero means no deadline, so a write waits for its reader however long that
+// takes.
+func TestConn_WritePayload_zeroTimeoutDoesNotExpire(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	c := NewConn(server)
+
+	want := []byte{0x00, 0x00, 0x00, 0x01, 0x65}
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.WriteFrame(want)
+	}()
+
+	// Read only after a pause the write would not survive if a deadline of the
+	// previous test's length were somehow in force.
+	time.Sleep(100 * time.Millisecond)
+
+	got := make([]byte, len(want))
+	if _, err := io.ReadFull(client, got); err != nil {
+		t.Fatalf("reading the frame: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the write never returned")
+	}
+}
+
+// A deadline must not leak into the next write on the same connection.
+func TestConn_WritePayload_clearsTheDeadlineAfterwards(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	c := NewConn(server)
+	c.SetWriteTimeout(2 * time.Second)
+
+	want := []byte{0x00, 0x00, 0x00, 0x01, 0x65}
+
+	for i := 0; i < 2; i++ {
+		done := make(chan error, 1)
+		go func() {
+			done <- c.WriteFrame(want)
+		}()
+
+		got := make([]byte, len(want))
+		if _, err := io.ReadFull(client, got); err != nil {
+			t.Fatalf("write %d, reading the frame: %v", i, err)
+		}
+
+		if err := <-done; err != nil {
+			t.Fatalf("write %d returned %v", i, err)
+		}
+	}
+}
+
+func TestConn_WriteTimeout_roundTrips(t *testing.T) {
+	_, server := net.Pipe()
+	defer server.Close()
+
+	c := NewConn(server)
+	if got := c.WriteTimeout(); got != 0 {
+		t.Fatalf("expected 0 before configuration, got %v", got)
+	}
+
+	c.SetWriteTimeout(3 * time.Second)
+
+	if got := c.WriteTimeout(); got != 3*time.Second {
+		t.Fatalf("expected 3s, got %v", got)
+	}
+}
+
+// The read loop drives its own deadline through the connection.
+func TestConn_SetReadDeadline(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+
+	c := NewConn(server)
+
+	if err := c.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("setting the deadline: %v", err)
+	}
+
+	buf := make([]byte, 1)
+	if _, err := c.Reader().Read(buf); !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("expected a deadline error, got %v", err)
 	}
 }

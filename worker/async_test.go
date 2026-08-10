@@ -252,7 +252,11 @@ func startWorkerOn(t *testing.T, registry *engine.Registry, handler func(*reques
 
 	client, server := net.Pipe()
 
-	go Handle(engine.NewConn(server), registry, handler, logger.NewNop())
+	go Handle(engine.NewConn(server), Config{
+		Registry: registry,
+		Handler:  handler,
+		Logger:   logger.NewNop(),
+	})
 
 	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		t.Fatalf("setting the deadline: %v", err)
