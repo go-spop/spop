@@ -17,14 +17,22 @@ type Request struct {
 	EngineID string
 	StreamID uint64
 	FrameID  uint64
+
+	// Messages is BORROWED from the frame this request describes. The frame
+	// owns them and releases them; a Request must never reset them, because
+	// Messages.Reset returns every entry to the message pool; doing it here
+	// would release the frame's messages out from under the frame. Valid only
+	// for the duration of the handler call.
 	Messages *message.Messages
-	Actions  action.Actions
+
+	Actions action.Actions
 }
 
 func newRequest() *Request {
+	// Messages is deliberately not allocated: it is always assigned from the
+	// frame being handled, so anything allocated here would be discarded.
 	m := &Request{
-		Messages: message.NewMessages(),
-		Actions:  make(action.Actions, 0, 1),
+		Actions: make(action.Actions, 0, 1),
 	}
 
 	return m
@@ -45,8 +53,11 @@ func ReleaseRequest(m *Request) {
 }
 
 func (req *Request) Reset() {
+	// Dropped, not reset: see the field's comment. Dropping also stops a
+	// pooled Request from retaining a pointer into a frame that has since gone
+	// back to the frame pool.
+	req.Messages = nil
 
-	req.Messages.Reset()
 	req.Actions.Reset()
 
 	req.EngineID = ""

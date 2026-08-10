@@ -306,12 +306,10 @@ func (w *worker) run() error {
 	defer w.awaitDeliverable()
 	defer w.leaveEngine()
 
-	var f *frame.Frame
-
 	buf := bufio.NewReader(w.conn.Reader())
 
 	for {
-		f = frame.AcquireFrame()
+		f := frame.AcquireFrame()
 
 		if err := w.armReadDeadline(); err != nil {
 			frame.ReleaseFrame(f)
@@ -349,75 +347,103 @@ func (w *worker) run() error {
 			return nil
 		}
 
-		switch f.Type {
-		case frame.TypeHAProxyHello:
+		transferred, done, err := w.dispatch(f)
 
-			if w.ready {
-				w.disconnect(statusCodeInvalidFrame, "unexpected HAProxyHello frame, handshake already completed")
-				return fmt.Errorf("worker already ready, but got HAProxyHello frame")
-			}
-
-			agreed, disconnectErr := negotiate(f)
-			if disconnectErr != nil {
-				frame.ReleaseFrame(f)
-				w.disconnect(disconnectErr.code, disconnectErr.message)
-				return fmt.Errorf("handshake failed: %w", disconnectErr)
-			}
-
-			w.peerCapabilities = agreed.capabilities
-			w.maxFrameSize = agreed.maxFrameSize
-			w.conn.SetMaxFrameSize(agreed.maxFrameSize)
-			w.engineID = f.EngineID
-
-			// Section 3.2.1 defines async as symmetrical, like pipelining: "To
-			// be used, it must be supported by HAproxy and agents." engine-id
-			// says the peer's connections CAN be grouped; the capability list
-			// says it will accept an ACK on a sibling. HAProxy sends engine-id
-			// unconditionally, so it alone proves nothing.
-			w.async = w.engineID != "" && slices.Contains(w.peerCapabilities, capabilityAsync)
-
-			if err := w.sendAgentHello(agreed); err != nil {
-				frame.ReleaseFrame(f)
-				// The AGENT-HELLO could not be written, so an AGENT-DISCONNECT
-				// cannot be either. Section 3.2.3's "error during the HELLO
-				// handshake" sequence is unreachable once the socket is failing.
-				return fmt.Errorf("error send AgentHello frame: %v", err)
-			}
-
-			if f.Healthcheck {
-				frame.ReleaseFrame(f)
-				return nil
-			}
-
-			w.ready = true
-			if w.async {
-				w.engine = w.registry.Join(w.engineID, w.conn)
-			}
-			continue
-
-		case frame.TypeHAProxyDisconnect:
-			if !w.ready {
-				w.disconnect(statusCodeInvalidFrame, "unexpected HAProxyDisconnect frame before the handshake")
-				return fmt.Errorf("worker not ready, but got HAProxyDisconnect frame")
-			}
-
-			if err := w.sendAgentDisconnect(statusCodeNormal, "connection closed by server"); err != nil {
-				return fmt.Errorf("error send AgentDisconnect frame: %v", err)
-			}
+		// One release for every acquire, decided in one place. Each exit inside
+		// dispatch used to carry its own release, and six of them did not.
+		if !transferred {
 			frame.ReleaseFrame(f)
-			return nil
-
-		case frame.TypeNotify:
-			if !w.ready {
-				w.disconnect(statusCodeInvalidFrame, "unexpected Notify frame before the handshake")
-				return fmt.Errorf("worker not ready, but got Notify frame")
-			}
-
-			w.inflight.Add(1)
-			go w.processNotifyFrame(f)
-
-		default:
-			w.logger.Errorf("unexpected frame type: %v", f.Type)
 		}
+
+		if err != nil {
+			return err
+		}
+
+		if done {
+			return nil
+		}
+	}
+}
+
+// dispatch handles one decoded frame.
+//
+// transferred reports that ownership of the frame moved elsewhere and the
+// caller must NOT release it. Only a NOTIFY transfers: its goroutine outlives
+// this iteration and releases the frame itself. done reports that the
+// connection should close with no error.
+func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err error) {
+	switch f.Type {
+	case frame.TypeHAProxyHello:
+		if w.ready {
+			w.disconnect(statusCodeInvalidFrame, "unexpected HAProxyHello frame, handshake already completed")
+			return false, false, fmt.Errorf("worker already ready, but got HAProxyHello frame")
+		}
+
+		agreed, disconnectErr := negotiate(f)
+		if disconnectErr != nil {
+			w.disconnect(disconnectErr.code, disconnectErr.message)
+			return false, false, fmt.Errorf("handshake failed: %w", disconnectErr)
+		}
+
+		w.peerCapabilities = agreed.capabilities
+		w.maxFrameSize = agreed.maxFrameSize
+		w.conn.SetMaxFrameSize(agreed.maxFrameSize)
+		w.engineID = f.EngineID
+
+		// Section 3.2.1 defines async as symmetrical, like pipelining: "To
+		// be used, it must be supported by HAproxy and agents." engine-id
+		// says the peer's connections CAN be grouped; the capability list
+		// says it will accept an ACK on a sibling. HAProxy sends engine-id
+		// unconditionally, so it alone proves nothing.
+		w.async = w.engineID != "" && slices.Contains(w.peerCapabilities, capabilityAsync)
+
+		if err := w.sendAgentHello(agreed); err != nil {
+			// The AGENT-HELLO could not be written, so an AGENT-DISCONNECT
+			// cannot be either. Section 3.2.3's "error during the HELLO
+			// handshake" sequence is unreachable once the socket is failing.
+			return false, false, fmt.Errorf("error send AgentHello frame: %v", err)
+		}
+
+		if f.Healthcheck {
+			return false, true, nil
+		}
+
+		w.ready = true
+		if w.async {
+			w.engine = w.registry.Join(w.engineID, w.conn)
+		}
+
+		return false, false, nil
+
+	case frame.TypeHAProxyDisconnect:
+		if !w.ready {
+			w.disconnect(statusCodeInvalidFrame, "unexpected HAProxyDisconnect frame before the handshake")
+			return false, false, fmt.Errorf("worker not ready, but got HAProxyDisconnect frame")
+		}
+
+		if err := w.sendAgentDisconnect(statusCodeNormal, "connection closed by server"); err != nil {
+			return false, false, fmt.Errorf("error send AgentDisconnect frame: %v", err)
+		}
+
+		return false, true, nil
+
+	case frame.TypeNotify:
+		if !w.ready {
+			w.disconnect(statusCodeInvalidFrame, "unexpected Notify frame before the handshake")
+			return false, false, fmt.Errorf("worker not ready, but got Notify frame")
+		}
+
+		// The goroutine owns the frame from here: it reads the payload after
+		// this iteration has moved on, and releases it when the handler
+		// returns and its ACK is written.
+		w.inflight.Add(1)
+		go w.processNotifyFrame(f)
+
+		return true, false, nil
+
+	default:
+		w.logger.Errorf("unexpected frame type: %v", f.Type)
+
+		return false, false, nil
 	}
 }
