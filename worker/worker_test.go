@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/go-spop/spop/client"
+	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
 )
@@ -36,7 +37,7 @@ func TestWorker(t *testing.T) {
 	}
 
 	go func() {
-		Handle(server, m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
 		m.Finish()
 	}()
 	if spoe.Init() != nil {
@@ -73,10 +74,10 @@ func TestWorkerConcurrent(t *testing.T) {
 	}
 
 	go func() {
-		Handle(server, m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
 	}()
 	go func() {
-		Handle(server2, m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server2), engine.NewRegistry(), m.Handle, logger.NewNop())
 	}()
 	duration := time.Second
 	loop := func(s client.Client) {
@@ -116,7 +117,7 @@ func BenchmarkWorker(b *testing.B) {
 	}
 
 	go func() {
-		Handle(server, m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
 		m.Finish()
 	}()
 

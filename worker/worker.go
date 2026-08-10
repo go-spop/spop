@@ -5,16 +5,19 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net"
+	"slices"
 	"sync"
 
+	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
 )
 
 const (
-	capabilities = "pipelining,async"
+	// Section 3.2.1's capability tokens.
+	capabilityPipelining = "pipelining"
+	capabilityAsync      = "async"
 
 	// frameLengthPrefix is the 4-byte FRAME-LENGTH field, which the length it
 	// declares does not itself count.
@@ -34,11 +37,12 @@ const (
 )
 
 // Handle listen connection and process frames
-func Handle(conn net.Conn, handler func(*request.Request), logger logger.Logger) {
+func Handle(conn *engine.Conn, registry *engine.Registry, handler func(*request.Request), logger logger.Logger) {
 	w := &worker{
-		conn:    conn,
-		handler: handler,
-		logger:  logger,
+		conn:     conn,
+		registry: registry,
+		handler:  handler,
+		logger:   logger,
 	}
 
 	if err := w.run(); err != nil {
@@ -47,31 +51,49 @@ func Handle(conn net.Conn, handler func(*request.Request), logger logger.Logger)
 }
 
 type worker struct {
-	conn     net.Conn
+	conn     *engine.Conn
+	registry *engine.Registry
+	engine   *engine.Engine
 	ready    bool
 	engineID string
 	handler  func(*request.Request)
 
 	// Negotiated during the HELLO handshake. maxFrameSize is the value the
-	// AGENT-HELLO announced, and bounds every frame afterwards in both
-	// directions. Written before the first NOTIFY goroutine is started.
+	// AGENT-HELLO announced and is recorded on the connection, which is what
+	// bounds writes to it. Written before the first NOTIFY goroutine starts.
 	peerCapabilities []string
 	maxFrameSize     uint32
 
-	// The peer is owed at most one AGENT-DISCONNECT, and the connection is
-	// closed once, however many goroutines reach the failure.
+	// async records whether this connection's ACKs may be rerouted to a
+	// sibling. Section 3.2.1 makes async "a symmectical capability [ ... ] To
+	// be used, it must be supported by HAproxy and agents" (the same rule it
+	// states for pipelining). engine-id alone only says the peer's
+	// connections CAN be grouped -- HAProxy sends it unconditionally, whether
+	// or not async is configured -- so async additionally requires the peer's
+	// capabilities list to name it.
+	async bool
+
+	// The peer is owed at most one AGENT-DISCONNECT however many goroutines
+	// reach the failure. The connection's own close is idempotent.
 	disconnectOnce sync.Once
-	closeOnce      sync.Once
 
 	logger logger.Logger
 }
 
 func (w *worker) close() {
-	w.closeOnce.Do(func() {
-		if err := w.conn.Close(); err != nil {
-			w.logger.Errorf("close connection: %v", err)
-		}
-	})
+	if err := w.conn.Close(); err != nil {
+		w.logger.Errorf("close connection: %v", err)
+	}
+}
+
+// leaveEngine takes this connection out of its engine so no further ACK is
+// routed to it. Safe before the handshake, when there is no engine yet.
+func (w *worker) leaveEngine() {
+	if w.engine == nil {
+		return
+	}
+
+	w.registry.Leave(w.engine, w.conn)
 }
 
 // disconnect reports an agent-side error to the peer before the connection is
@@ -102,13 +124,22 @@ func (w *worker) frameLimit() uint32 {
 	return w.maxFrameSize
 }
 
-func (w *worker) run() error {
+// advertisedCapabilities is what this connection's AGENT-HELLO claims.
+func (w *worker) advertisedCapabilities() string {
+	if !w.async {
+		return capabilityPipelining
+	}
 
+	return capabilityPipelining + "," + capabilityAsync
+}
+
+func (w *worker) run() error {
 	defer w.close()
+	defer w.leaveEngine()
 
 	var f *frame.Frame
 
-	buf := bufio.NewReader(w.conn)
+	buf := bufio.NewReader(w.conn.Reader())
 
 	for {
 		f = frame.AcquireFrame()
@@ -145,6 +176,15 @@ func (w *worker) run() error {
 
 			w.peerCapabilities = agreed.capabilities
 			w.maxFrameSize = agreed.maxFrameSize
+			w.conn.SetMaxFrameSize(agreed.maxFrameSize)
+			w.engineID = f.EngineID
+
+			// Section 3.2.1 defines async as symmetrical, like pipelining: "To
+			// be used, it must be supported by HAproxy and agents." engine-id
+			// says the peer's connections CAN be grouped; the capability list
+			// says it will accept an ACK on a sibling. HAProxy sends engine-id
+			// unconditionally, so it alone proves nothing.
+			w.async = w.engineID != "" && slices.Contains(w.peerCapabilities, capabilityAsync)
 
 			if err := w.sendAgentHello(f, agreed); err != nil {
 				frame.ReleaseFrame(f)
@@ -159,9 +199,10 @@ func (w *worker) run() error {
 				return nil
 			}
 
-			w.engineID = f.EngineID
-
 			w.ready = true
+			if w.async {
+				w.engine = w.registry.Join(w.engineID, w.conn)
+			}
 			continue
 
 		case frame.TypeHAProxyDisconnect:

@@ -6,7 +6,7 @@ import (
 
 // The Peers varint encodes 4 bits in its first byte and 7 in each byte after,
 // so a full 64-bit value needs 10 bytes. Converting a negative signed value to
-// uint64 sign-extends it — int32(-1) becomes 2^64-1 — so every negative value
+// uint64 sign-extends it; int32(-1) becomes 2^64-1; so every negative value
 // takes the longest encoding there is.
 //
 // Encode must produce a value Decode returns unchanged, for the whole range of
