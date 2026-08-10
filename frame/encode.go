@@ -10,6 +10,13 @@ import (
 )
 
 func (f *Frame) Encode(dest io.Writer) (n int, err error) {
+	// Section 3.2 on the ABORT bit: "When it is set, the FIN bit must also be
+	// set." Checked before anything is assembled, so a rejected frame leaves
+	// nothing on the wire and no partial state behind.
+	if f.IsAbort() && !f.IsFin() {
+		return 0, ErrAbortWithoutFin
+	}
+
 	buf := bytes.Buffer{}
 
 	// Reserve the FRAME-LENGTH prefix. Its value is only known once the payload
