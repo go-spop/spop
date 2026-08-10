@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -28,7 +29,7 @@ func startWorkerTimeouts(t *testing.T, timeouts Timeouts) net.Conn {
 
 	go Handle(engine.NewConn(server), Config{
 		Registry: engine.NewRegistry(),
-		Handler:  func(*request.Request) {},
+		Handler:  func(context.Context, *request.Request) {},
 		Logger:   logger.NewNop(),
 		Timeouts: timeouts,
 	})

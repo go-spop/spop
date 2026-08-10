@@ -139,8 +139,12 @@ func (c *Conn) WriteTimeout() time.Duration {
 	return c.writeTimeout
 }
 
-// SetReadDeadline lets the read loop bound its own next read. Only that one
-// goroutine reads from a connection, so this needs no serialisation of its own.
+// SetReadDeadline lets the read loop bound its own next read, and is also how
+// Agent.Shutdown wakes a read blocked in that loop without closing the
+// socket, so an in-flight ACK can still go out. That cross-goroutine call is
+// by design -- the drain poke comes from Shutdown, the arm from the read loop
+// -- and it is sound because net.Conn's deadline setters are documented as
+// safe for concurrent use.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)
 }

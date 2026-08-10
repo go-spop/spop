@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"io"
 	"net"
@@ -93,7 +94,7 @@ func TestWorker_acceptsInboundFrameWithinNegotiatedSize(t *testing.T) {
 // An ACK the handler makes too large cannot go on the wire: section 3.2.9 wants
 // the error reported, and code 3 names it.
 func TestWorker_reportsOversizedAck(t *testing.T) {
-	handler := func(r *request.Request) {
+	handler := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "big", strings.Repeat("x", negotiatedSize*2))
 	}
 
@@ -121,7 +122,7 @@ func TestWorker_reportsOversizedAck(t *testing.T) {
 // An ACK that fits is written as an ACK, so the ceiling does not reject
 // ordinary traffic.
 func TestWorker_writesAckWithinNegotiatedSize(t *testing.T) {
-	handler := func(r *request.Request) {
+	handler := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "small", "ok")
 	}
 

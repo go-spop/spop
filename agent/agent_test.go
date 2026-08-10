@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -8,7 +9,7 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-func noopHandler(*request.Request) {}
+func noopHandler(context.Context, *request.Request) {}
 
 // The handshake and write deadlines are on by default: they fire only against a
 // pathological peer, and without them a stalled socket pins a goroutine

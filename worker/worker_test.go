@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"context"
 	"net"
 	"testing"
 	"time"
@@ -12,12 +13,12 @@ import (
 )
 
 type MockedHandler struct {
-	handleFunc func(r *request.Request)
+	handleFunc func(ctx context.Context, r *request.Request)
 	finishFunc func()
 }
 
-func (h *MockedHandler) Handle(r *request.Request) {
-	h.handleFunc(r)
+func (h *MockedHandler) Handle(ctx context.Context, r *request.Request) {
+	h.handleFunc(ctx, r)
 }
 
 func (h *MockedHandler) Finish() {
@@ -28,7 +29,7 @@ func TestWorker(t *testing.T) {
 	clientConn, server := net.Pipe()
 	spoe := client.NewClient(clientConn)
 	m := MockedHandler{
-		handleFunc: func(r *request.Request) {
+		handleFunc: func(_ context.Context, r *request.Request) {
 
 		},
 		finishFunc: func() {
@@ -69,7 +70,7 @@ func TestWorkerConcurrent(t *testing.T) {
 	spoe := client.NewClient(clientConn)
 	spoe2 := client.NewClient(clientConn2)
 	m := MockedHandler{
-		handleFunc: func(r *request.Request) {
+		handleFunc: func(_ context.Context, r *request.Request) {
 
 		},
 		finishFunc: func() {
@@ -120,7 +121,7 @@ func BenchmarkWorker(b *testing.B) {
 	clientConn, server := net.Pipe()
 	spoe := client.NewClient(clientConn)
 	m := MockedHandler{
-		handleFunc: func(r *request.Request) {
+		handleFunc: func(_ context.Context, r *request.Request) {
 
 		},
 		finishFunc: func() {

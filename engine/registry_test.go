@@ -215,3 +215,55 @@ func TestRegistry_ConcurrentJoinWriteLeave(t *testing.T) {
 		t.Fatalf("expected the registry to be empty once every goroutine left, got %d engines", got)
 	}
 }
+
+// A worker cancels its in-flight handlers when no sibling can carry their ACK,
+// so Leave has to say which departure was the last one.
+func TestRegistry_Leave_reportsTheLastDeparture(t *testing.T) {
+	r := NewRegistry()
+
+	first := newTestConn(t)
+	second := newTestConn(t)
+
+	e := r.Join("engine-1", first)
+	r.Join("engine-1", second)
+
+	if last := r.Leave(e, first); last {
+		t.Fatal("expected false while a sibling remained")
+	}
+
+	if last := r.Leave(e, second); !last {
+		t.Fatal("expected true for the departure that emptied the engine")
+	}
+}
+
+// A connection with no engine-id gets a singleton engine, so its only departure
+// is necessarily the last.
+func TestRegistry_Leave_reportsTheLastDepartureOfAnUnidentifiedEngine(t *testing.T) {
+	r := NewRegistry()
+
+	c := newTestConn(t)
+	e := r.Join("", c)
+
+	if last := r.Leave(e, c); !last {
+		t.Fatal("expected true for the only connection of an unidentified engine")
+	}
+}
+
+// A repeated Leave must not claim the engine emptied twice. Engine.Remove
+// already guards this -- "already empty" must not be mistaken for "just
+// emptied" -- and the guard is now load bearing for cancellation, not only for
+// the registry's counter.
+func TestRegistry_Leave_doesNotReportTheSameDepartureTwice(t *testing.T) {
+	r := NewRegistry()
+
+	c := newTestConn(t)
+	e := r.Join("engine-1", c)
+
+	if last := r.Leave(e, c); !last {
+		t.Fatal("expected true for the first Leave")
+	}
+
+	if last := r.Leave(e, c); last {
+		t.Fatal("expected false for the repeated Leave")
+	}
+}
