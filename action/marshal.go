@@ -29,6 +29,13 @@ func (action *Action) Marshal(buf []byte) ([]byte, error) {
 	buf = append(buf, b[:n]...)
 	buf = append(buf, action.Name...)
 
+	// ACTION-UNSET-VAR has no value field: its NB-ARGS of 2 governs the scope
+	// and the name and nothing more. LIST-OF-ACTIONS has no item count, so a
+	// trailing byte here is read as the next entry's ACTION-TYPE.
+	if action.Type == TypeUnsetVar {
+		return buf, nil
+	}
+
 	valueBuf, n, err := typeddata.Encode(action.Value, make([]byte, 0))
 	if err != nil {
 		return nil, err
