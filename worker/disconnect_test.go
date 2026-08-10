@@ -92,9 +92,15 @@ func haproxyHello(t *testing.T) *frame.Frame {
 func startWorker(t *testing.T) net.Conn {
 	t.Helper()
 
+	return startWorkerWith(t, func(*request.Request) {})
+}
+
+func startWorkerWith(t *testing.T, handler func(*request.Request)) net.Conn {
+	t.Helper()
+
 	client, server := net.Pipe()
 
-	go Handle(server, func(*request.Request) {}, logger.NewNop())
+	go Handle(server, handler, logger.NewNop())
 
 	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
 		t.Fatalf("setting the deadline: %v", err)

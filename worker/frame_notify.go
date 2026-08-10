@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/go-spop/spop/frame"
@@ -32,6 +33,15 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	err := w.writeFrame(ackFrame)
 	if err != nil {
 		w.logger.Errorf("ack frame write failed: %v", err)
+
+		// An ACK the handler made too large cannot be fragmented, so it cannot
+		// be sent at all. Section 3.2.9 has the agent report the error and
+		// close rather than leave HAProxy waiting on an ACK that will never
+		// arrive.
+		if errors.Is(err, frame.ErrFrameTooBig) {
+			w.disconnect(statusCodeFrameTooBig, err.Error())
+			w.close()
+		}
 	}
 }
 
@@ -40,6 +50,12 @@ func (w *worker) writeFrame(f *frame.Frame) error {
 	n, err := f.Encode(buf)
 	if err != nil {
 		return fmt.Errorf("cannot marshal frame: %w", err)
+	}
+
+	// FRAME-LENGTH excludes its own 4 prefix bytes, so the negotiated ceiling
+	// is compared against the same quantity Read checks on the way in.
+	if length := uint32(n - frameLengthPrefix); length > w.frameLimit() {
+		return fmt.Errorf("%w: %d exceeds the %d byte maximum", frame.ErrFrameTooBig, length, w.frameLimit())
 	}
 
 	n, err = w.conn.Write(buf.Bytes())
