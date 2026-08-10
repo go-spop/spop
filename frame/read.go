@@ -67,14 +67,29 @@ func (f *Frame) Read(src io.Reader) error {
 		if err = f.KV.Unmarshal(buf); err != nil {
 			return err
 		}
-		if v, ok := f.KV.Get("healthcheck"); ok && v.(bool) {
-			f.Healthcheck = true
+		// Each KV-VALUE carries its own TYPED-DATA type nibble, so the type of
+		// a received item is chosen by the peer. Assert rather than trust: a
+		// mistyped item is malformed input, not a value to convert.
+		if v, ok := f.KV.Get("healthcheck"); ok {
+			healthcheck, ok := v.(bool)
+			if !ok {
+				return fmt.Errorf("expected BOOLEAN for healthcheck, got %T", v)
+			}
+			f.Healthcheck = healthcheck
 		}
 		if v, ok := f.KV.Get("max-frame-size"); ok {
-			f.MaxFrameSize = v.(uint32)
+			maxFrameSize, ok := v.(uint32)
+			if !ok {
+				return fmt.Errorf("expected UINT32 for max-frame-size, got %T", v)
+			}
+			f.MaxFrameSize = maxFrameSize
 		}
 		if v, ok := f.KV.Get("engine-id"); ok {
-			f.EngineID = v.(string)
+			engineID, ok := v.(string)
+			if !ok {
+				return fmt.Errorf("expected STRING for engine-id, got %T", v)
+			}
+			f.EngineID = engineID
 		}
 
 	case TypeNotify:
