@@ -12,17 +12,28 @@ import (
 func (f *Frame) Encode(dest io.Writer) (n int, err error) {
 	buf := bytes.Buffer{}
 
+	// Reserve the FRAME-LENGTH prefix. Its value is only known once the payload
+	// is encoded, so it is patched in below; building it into the same buffer
+	// is what lets the whole frame reach dest in a single Write, rather than a
+	// prefix that can land without the body behind it.
+	var prefix [frameLengthPrefix]byte
+	buf.Write(prefix[:])
+
 	buf.WriteByte(byte(f.Type))
 
 	binary.BigEndian.PutUint32(f.tmp[:], f.Flags)
 
 	buf.Write(f.tmp[0:4])
 
-	n = varint.PutUvarint(f.varintBuf[:], f.StreamID)
-	buf.Write(f.varintBuf[:n])
+	// Kept out of n, which reports bytes written to dest and nothing else, so
+	// an early return below cannot report a varint's length as a write count.
+	var varintLen int
 
-	n = varint.PutUvarint(f.varintBuf[:], f.FrameID)
-	buf.Write(f.varintBuf[:n])
+	varintLen = varint.PutUvarint(f.varintBuf[:], f.StreamID)
+	buf.Write(f.varintBuf[:varintLen])
+
+	varintLen = varint.PutUvarint(f.varintBuf[:], f.FrameID)
+	buf.Write(f.varintBuf[:varintLen])
 
 	var payload []byte
 
@@ -55,17 +66,18 @@ func (f *Frame) Encode(dest io.Writer) (n int, err error) {
 
 	buf.Write(payload)
 
-	binary.BigEndian.PutUint32(f.tmp[:], uint32(buf.Len()))
-
-	n, err = dest.Write(f.tmp[0:4])
-	if err != nil || n != 4 {
-		return 0, fmt.Errorf("error write frameSize. writes %d, expect %d, err: %v", n, len(f.tmp), err)
-	}
+	// FRAME-LENGTH counts everything after itself, which is the quantity Read
+	// stores too, so both operations agree on what Len means.
+	f.Len = uint32(buf.Len() - frameLengthPrefix)
+	binary.BigEndian.PutUint32(buf.Bytes()[:frameLengthPrefix], f.Len)
 
 	n, err = dest.Write(buf.Bytes())
 	if err != nil || n != buf.Len() {
-		return 0, fmt.Errorf("error write frame. writes %d, expect %d, err: %v", n, len(f.tmp), err)
+		// n is what dest actually took, so a caller can tell a frame that never
+		// left from one cut short. %w keeps the writer's own error reachable by
+		// errors.Is.
+		return n, fmt.Errorf("error write frame. writes %d, expect %d, err: %w", n, buf.Len(), err)
 	}
 
-	return 4 + buf.Len(), nil
+	return n, nil
 }
