@@ -13,7 +13,7 @@ import (
 
 // WritePayload holds the connection for the whole callback. Fragmentation will
 // later emit several frames inside one call, and SPOE 2.0 section 3.2 forbids
-// interleaving frames of different payloads on one connection -- so bytes from
+// interleaving frames of different payloads on one connection; so bytes from
 // two concurrent callbacks must never overlap.
 func TestConn_WritePayload_serialisesConcurrentWriters(t *testing.T) {
 	client, server := net.Pipe()
@@ -41,7 +41,7 @@ func TestConn_WritePayload_serialisesConcurrentWriters(t *testing.T) {
 				// other writer, so the two halves are guaranteed to be split
 				// apart. Holding the lock, it only makes the test take
 				// writers*pause to run. Relying on the scheduler instead would
-				// make this a coin flip -- it caught a missing lock about half
+				// make this a coin flip; it caught a missing lock about half
 				// the time.
 				time.Sleep(2 * time.Millisecond)
 
@@ -169,7 +169,7 @@ func TestConn_MaxFrameSize_roundTrips(t *testing.T) {
 }
 
 // A peer that never reads must not pin a writer forever. net.Pipe is
-// unbuffered, so a Write with no reader blocks until the deadline fires -- an
+// unbuffered, so a Write with no reader blocks until the deadline fires; an
 // exact model of a wedged peer.
 func TestConn_WritePayload_honoursTheWriteTimeout(t *testing.T) {
 	client, server := net.Pipe()

@@ -120,7 +120,7 @@ func TestWorker_zeroIdleTimeoutNeverFires(t *testing.T) {
 
 // assertStaysOpen gives a short-timeout worker several times its deadline to
 // misbehave, then confirms nothing arrived and the connection is still usable.
-// The assertion is on WHAT happened -- no frame, no EOF -- not on timing.
+// The assertion is on WHAT happened; no frame, no EOF; not on timing.
 func assertStaysOpen(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 	t.Helper()
 
@@ -139,8 +139,8 @@ func assertStaysOpen(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 	}
 
 	// The pass case is the TEST's own read deadline and nothing else. Accepting
-	// any non-EOF error here would let an unrelated failure -- a reset, a
-	// closed pipe -- masquerade as the connection staying healthy.
+	// any non-EOF error here would let an unrelated failure; a reset, a
+	// closed pipe; masquerade as the connection staying healthy.
 	if !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("expected the test's own read deadline, got %v", err)
 	}

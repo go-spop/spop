@@ -10,8 +10,8 @@ import (
 )
 
 // sink collects everything written to one end of a pipe. net.Pipe is
-// unbuffered and synchronous -- a Write blocks until a reader consumes all of
-// it -- so the reader must drain in a loop. Reading a fixed 64 bytes once would
+// unbuffered and synchronous; a Write blocks until a reader consumes all of
+// it; so the reader must drain in a loop. Reading a fixed 64 bytes once would
 // deadlock any test writing more than that.
 type sink struct {
 	mu    sync.Mutex
@@ -155,7 +155,7 @@ func TestEngine_Write_skipsAConnectionWhoseCeilingIsTooSmall(t *testing.T) {
 	}
 
 	// FRAME-LENGTH excludes its own 4 prefix bytes, so this is a 300-byte frame
-	// -- above the 256 tooSmall negotiated, below the 16384 roomy did.
+	//; above the 256 tooSmall negotiated, below the 16384 roomy did.
 	big := make([]byte, 304)
 
 	if err := e.Write(dead, big); err != nil {

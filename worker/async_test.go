@@ -205,7 +205,7 @@ func TestWorker_noFailoverWithoutTheAsyncCapability(t *testing.T) {
 }
 
 // assertNoFrame asserts that nothing arrives on conn/reader within a short
-// deadline. Used to prove a negative -- that no ACK was rerouted -- which has
+// deadline. Used to prove a negative; that no ACK was rerouted; which has
 // no synchronisation signal to wait on instead.
 func assertNoFrame(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 	t.Helper()

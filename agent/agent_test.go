@@ -14,7 +14,7 @@ func noopHandler(context.Context, *request.Request) {}
 // The handshake and write deadlines are on by default: they fire only against a
 // pathological peer, and without them a stalled socket pins a goroutine
 // forever. Idle is opt-in, because closing idle connections is churn an
-// operator has to coordinate with HAProxy's own "timeout idle" -- and under
+// operator has to coordinate with HAProxy's own "timeout idle"; and under
 // async it also removes failover partners from an engine.
 func TestNew_defaults(t *testing.T) {
 	a := New(noopHandler, logger.NewNop())

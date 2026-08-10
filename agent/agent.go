@@ -93,10 +93,49 @@ type Agent struct {
 	wg        sync.WaitGroup
 }
 
+// Accept backoff bounds, matching net/http.Server.Serve. A temporary accept
+// error is usually the descriptor table filling up, and retrying it as fast as
+// the CPU allows pins a core on top of the exhaustion that caused it;
+// starving the connections already being served of the very goroutine that
+// would run them.
+const (
+	minAcceptBackoff = 5 * time.Millisecond
+	maxAcceptBackoff = 1 * time.Second
+)
+
+func nextAcceptBackoff(d time.Duration) time.Duration {
+	if d == 0 {
+		return minAcceptBackoff
+	}
+
+	if d *= 2; d > maxAcceptBackoff {
+		return maxAcceptBackoff
+	}
+
+	return d
+}
+
+// pause waits out an accept backoff, reporting false if a drain began first.
+// Sleeping outright would make a shutdown sit through up to a second of a delay
+// that exists only to throttle a listener nobody is accepting from any more.
+func (agent *Agent) pause(d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+
+	select {
+	case <-timer.C:
+		return true
+	case <-agent.done:
+		return false
+	}
+}
+
 func (agent *Agent) Serve(listener net.Listener) error {
 	if !agent.addListener(listener) {
 		return ErrShutdown
 	}
+
+	var backoff time.Duration
 
 	for {
 		conn, err := listener.Accept()
@@ -105,12 +144,27 @@ func (agent *Agent) Serve(listener net.Listener) error {
 				return ErrShutdown
 			}
 
+			//nolint:staticcheck // Temporary is deprecated, but it is still what
+			// classifies EMFILE/ENFILE as retryable, and net/http's own accept
+			// loop reads it for the same reason. Replacing the predicate is
+			// tracked separately as audit finding D-12.
 			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+				backoff = nextAcceptBackoff(backoff)
+				agent.logger.Errorf("accept failed, retrying in %v: %v", backoff, err)
+
+				if !agent.pause(backoff) {
+					return ErrShutdown
+				}
+
 				continue
 			}
 
 			return err
 		}
+
+		// The condition cleared, so the next failure starts from the floor
+		// again rather than from whatever this one grew to.
+		backoff = 0
 
 		c := engine.NewConn(conn)
 		c.SetWriteTimeout(agent.timeouts.Write)
@@ -150,7 +204,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 // usually being stopped too) makes its worker exit via EOF with nothing left
 // to deliver an ACK to, so that worker cancels its still-running handlers
 // immediately instead of waiting for them. A nil return therefore does not
-// promise every handler ran to completion -- only that none was left running
+// promise every handler ran to completion; only that none was left running
 // past the grace period.
 //
 // Serve returns ErrShutdown as soon as the listener closes; it does not wait
@@ -167,7 +221,7 @@ func (agent *Agent) Shutdown(ctx context.Context) error {
 	// ordering the deadline poke below depends on: this close happens-before
 	// any poke, so worker's armReadDeadline can re-check shuttingDown() right
 	// after arming its own deadline and trust that a poke able to land by then
-	// already has `done` closed -- which is what makes that second check catch
+	// already has `done` closed; which is what makes that second check catch
 	// the race instead of missing it.
 	agent.draining = true
 	close(agent.done)

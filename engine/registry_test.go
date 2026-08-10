@@ -112,7 +112,7 @@ func TestRegistry_Join_afterTheEngineWasForgotten(t *testing.T) {
 }
 
 // Leaving twice must not be counted twice. Remove reports "this call emptied
-// the engine", so a repeated Leave -- from a duplicate teardown path, say --
+// the engine", so a repeated Leave; from a duplicate teardown path, say;
 // has to be a no-op rather than a second decrement.
 func TestRegistry_Leave_isNotCountedTwice(t *testing.T) {
 	r := NewRegistry()
@@ -139,7 +139,7 @@ func TestRegistry_Leave_isNotCountedTwice(t *testing.T) {
 }
 
 // A stale Leave for an engine that has already been replaced must not evict its
-// successor. Remove is what enforces this today -- it reports false for a
+// successor. Remove is what enforces this today; it reports false for a
 // connection it did not remove, so the repeated Leave returns early. The test
 // pins the behaviour rather than the mechanism, so it still fails if either
 // Remove's contract or Leave's guard regresses.
@@ -165,7 +165,7 @@ func TestRegistry_Leave_doesNotEvictAReplacementEngine(t *testing.T) {
 
 // TestRegistry_ConcurrentJoinWriteLeave exercises one shared Registry from
 // many goroutines at once, each doing its own Join, Write and Leave against a
-// handful of shared engine-ids -- the pattern many workers produce in
+// handful of shared engine-ids; the pattern many workers produce in
 // practice. Correctness here does not depend on ordering or timing: every
 // goroutine's Join is matched by its own Leave, so however the operations
 // interleave, the registry must be empty once every goroutine has finished.
@@ -250,8 +250,8 @@ func TestRegistry_Leave_reportsTheLastDepartureOfAnUnidentifiedEngine(t *testing
 }
 
 // A repeated Leave must not claim the engine emptied twice. Engine.Remove
-// already guards this -- "already empty" must not be mistaken for "just
-// emptied" -- and the guard is now load bearing for cancellation, not only for
+// already guards this; "already empty" must not be mistaken for "just
+// emptied"; and the guard is now load bearing for cancellation, not only for
 // the registry's counter.
 func TestRegistry_Leave_doesNotReportTheSameDepartureTwice(t *testing.T) {
 	r := NewRegistry()

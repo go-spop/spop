@@ -81,8 +81,8 @@ func main() {
 	defer stop()
 
 	// Serve returns as soon as the listener closes, before the drain finishes.
-	// main waits on drained so the process does not exit -- and kill the
-	// Shutdown goroutine -- mid-drain.
+	// main waits on drained so the process does not exit; and kill the
+	// Shutdown goroutine; mid-drain.
 	drained := make(chan struct{})
 
 	go func() {
