@@ -1,12 +1,23 @@
 package frame
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/go-spop/spop/action"
 	"github.com/go-spop/spop/message"
 	"github.com/go-spop/spop/payload/kv"
 )
+
+// FLAGS bits from SPOE 2.0 section 3.2.
+const (
+	flagFin   uint32 = 0x01
+	flagAbort uint32 = 0x02
+)
+
+// ErrAbortWithoutFin reports the one FLAGS combination section 3.2 forbids, at
+// docs/SPOE.txt:718: "When it is set, the FIN bit must also be set."
+var ErrAbortWithoutFin = errors.New("frame: ABORT set without FIN")
 
 type Type byte
 
@@ -70,7 +81,7 @@ type Frame struct {
 // Fin byte in Flags already set
 func NewFrame() *Frame {
 	f := &Frame{
-		Flags:    0x01,
+		Flags:    flagFin,
 		KV:       kv.AcquireKV(),
 		Messages: message.NewMessages(),
 	}
@@ -81,7 +92,7 @@ func NewFrame() *Frame {
 func (f *Frame) Reset() {
 	f.Len = 0
 	f.Type = 0
-	f.Flags = 0x01
+	f.Flags = flagFin
 	f.EngineID = ""
 	f.StreamID = 0
 	f.FrameID = 0
@@ -95,10 +106,10 @@ func (f *Frame) Reset() {
 
 // IsFin returns true, if frame has flag 'FIN'
 func (f *Frame) IsFin() bool {
-	return f.Flags&0x01 > 0
+	return f.Flags&flagFin > 0
 }
 
 // IsAbort returns true, if frame has flag 'ABORT'
 func (f *Frame) IsAbort() bool {
-	return f.Flags&0x02 > 0
+	return f.Flags&flagAbort > 0
 }

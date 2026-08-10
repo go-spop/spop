@@ -376,7 +376,7 @@ func (w *worker) run() error {
 			// unconditionally, so it alone proves nothing.
 			w.async = w.engineID != "" && slices.Contains(w.peerCapabilities, capabilityAsync)
 
-			if err := w.sendAgentHello(f, agreed); err != nil {
+			if err := w.sendAgentHello(agreed); err != nil {
 				frame.ReleaseFrame(f)
 				// The AGENT-HELLO could not be written, so an AGENT-DISCONNECT
 				// cannot be either. Section 3.2.3's "error during the HELLO
