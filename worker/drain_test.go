@@ -149,8 +149,8 @@ func TestWorker_drainOnAQuietConnectionSaysGoodbye(t *testing.T) {
 }
 
 // Once the drain starts, a NOTIFY still on the wire is not dispatched. SPOP has
-// no way to tell HAProxy "going away, finish what you have" -- section 3.2.9
-// makes the goodbye terminal -- so the alternative is a shutdown that never
+// no way to tell HAProxy "going away, finish what you have"; section 3.2.9
+// makes the goodbye terminal; so the alternative is a shutdown that never
 // completes under steady traffic.
 func TestWorker_drainDoesNotDispatchNewNotifies(t *testing.T) {
 	dispatched := make(chan struct{}, 1)
@@ -164,7 +164,7 @@ func TestWorker_drainDoesNotDispatchNewNotifies(t *testing.T) {
 	beginDrain(t, conn, done)
 
 	// net.Pipe is unbuffered, so this write only completes if the worker reads
-	// it -- which is the thing being ruled out. Write from a goroutine so the
+	// it; which is the thing being ruled out. Write from a goroutine so the
 	// test does not block on its own assertion.
 	go func() {
 		notify := frame.AcquireFrame()

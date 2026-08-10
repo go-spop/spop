@@ -119,8 +119,8 @@ type worker struct {
 	// sibling. Section 3.2.1 makes async "a symmectical capability [ ... ] To
 	// be used, it must be supported by HAproxy and agents" (the same rule it
 	// states for pipelining). engine-id alone only says the peer's
-	// connections CAN be grouped -- HAProxy sends it unconditionally, whether
-	// or not async is configured -- so async additionally requires the peer's
+	// connections CAN be grouped; HAProxy sends it unconditionally, whether
+	// or not async is configured; so async additionally requires the peer's
 	// capabilities list to name it.
 	async bool
 
@@ -131,7 +131,7 @@ type worker struct {
 	// inflight counts the NOTIFY handlers dispatched from this connection. Add
 	// is only ever called from the read-loop goroutine and Wait runs in that
 	// same goroutine once the loop has stopped, so the WaitGroup reuse race
-	// cannot occur -- not by careful locking, but by construction.
+	// cannot occur; not by careful locking, but by construction.
 	inflight sync.WaitGroup
 
 	// deliverable records whether a sibling can still carry an in-flight ACK
@@ -173,14 +173,14 @@ func (w *worker) leaveEngine() {
 }
 
 // awaitDeliverable waits for in-flight handlers when a sibling can still carry
-// their ACKs -- section 3.2.1's async failover is exactly the case where a
+// their ACKs; section 3.2.1's async failover is exactly the case where a
 // handler outliving its own connection is still useful. When nothing can carry
 // them it returns at once, and the cancel that follows stops handlers whose
 // results nobody can receive.
 //
 // During a shutdown this wait is bounded: Agent.Shutdown's grace-period
 // expiry cancels the base context, which cancels the handlers and lets the
-// WaitGroup reach zero. Outside a shutdown there is no bound -- a connection
+// WaitGroup reach zero. Outside a shutdown there is no bound; a connection
 // that dies while an async sibling remains, running a handler that never
 // returns, blocks here indefinitely, because this worker's own cancel (run's
 // deferred call) only happens after this wait returns. That is the deliberate
@@ -259,7 +259,7 @@ func (w *worker) armReadDeadline() error {
 	// A drain that began while this loop was between reads: catching it here is
 	// a fast path that saves the syscall of arming a deadline this loop would
 	// only have to expire again. It is not what closes the shutdown-wakeup
-	// race -- every interleaving this check catches is also caught by the
+	// race; every interleaving this check catches is also caught by the
 	// post-arm check below, which is the load-bearing one.
 	if w.shuttingDown() {
 		return w.conn.SetReadDeadline(time.Now())
@@ -276,8 +276,8 @@ func (w *worker) armReadDeadline() error {
 	}
 
 	// Re-check after arming: Shutdown's poke can land between the check above
-	// and the SetReadDeadline just done, and the arm above -- Idle == 0 arms
-	// time.Time{}, an idle timeout arms a later deadline -- would silently
+	// and the SetReadDeadline just done, and the arm above; Idle == 0 arms
+	// time.Time{}, an idle timeout arms a later deadline; would silently
 	// erase or outlast that poke, parking this read with no way to wake it.
 	// Agent.Shutdown closes `done` strictly before it pokes any connection's
 	// deadline, so that ordering guarantees a poke able to land here already

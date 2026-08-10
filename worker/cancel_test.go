@@ -67,7 +67,7 @@ func TestWorker_cancelsHandlersWhenTheConnectionGoes(t *testing.T) {
 	}
 }
 
-// A handler must not be cancelled while a sibling can still carry its ACK --
+// A handler must not be cancelled while a sibling can still carry its ACK;
 // that failover is the whole point of async. The worker therefore waits for its
 // in-flight handlers before cancelling, whenever a sibling remains.
 func TestWorker_doesNotCancelWhileASiblingCanDeliver(t *testing.T) {
@@ -92,7 +92,7 @@ func TestWorker_doesNotCancelWhileASiblingCanDeliver(t *testing.T) {
 
 	// The sibling only needs to carry the ACK once the handler releases; its own
 	// handler must return immediately, or waitUntilJoined's own synchronous
-	// NOTIFY below -- answered on this same connection -- would block on the
+	// NOTIFY below; answered on this same connection; would block on the
 	// very release gate this test does not close until the end.
 	sibling := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "answer", "42")
@@ -131,7 +131,7 @@ func TestWorker_doesNotCancelWhileASiblingCanDeliver(t *testing.T) {
 	}
 
 	// Give the exit path several times over what it needs to cancel wrongly.
-	// The assertion is on WHAT happened -- no cancellation -- not on timing.
+	// The assertion is on WHAT happened; no cancellation; not on timing.
 	select {
 	case <-cancelled:
 		t.Fatal("the handler was cancelled while a sibling could still carry its ACK")

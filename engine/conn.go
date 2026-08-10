@@ -37,7 +37,7 @@ func (c *Conn) Reader() io.Reader {
 }
 
 // WritePayload runs fn with exclusive use of the connection. A write timeout,
-// when set, bounds the whole payload rather than each Write inside it -- the
+// when set, bounds the whole payload rather than each Write inside it; the
 // callback is one payload, and a peer that stops reading half way through it
 // has wedged the connection just as surely as one that never read at all.
 func (c *Conn) WritePayload(fn func(io.Writer) error) error {
@@ -142,8 +142,8 @@ func (c *Conn) WriteTimeout() time.Duration {
 // SetReadDeadline lets the read loop bound its own next read, and is also how
 // Agent.Shutdown wakes a read blocked in that loop without closing the
 // socket, so an in-flight ACK can still go out. That cross-goroutine call is
-// by design -- the drain poke comes from Shutdown, the arm from the read loop
-// -- and it is sound because net.Conn's deadline setters are documented as
+// by design; the drain poke comes from Shutdown, the arm from the read loop;
+// and it is sound because net.Conn's deadline setters are documented as
 // safe for concurrent use.
 func (c *Conn) SetReadDeadline(t time.Time) error {
 	return c.conn.SetReadDeadline(t)

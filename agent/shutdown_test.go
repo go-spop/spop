@@ -242,7 +242,7 @@ func TestAgent_ShutdownDoesNotWaitForAHandlerThatIgnoresItsContext(t *testing.T)
 
 // A connection accepted after the drain began is closed rather than served.
 // The Accept race itself is not reproducible on demand, so this drives the
-// decision point directly -- track is what Serve consults.
+// decision point directly; track is what Serve consults.
 func TestAgent_TrackRefusesOnceDraining(t *testing.T) {
 	a := New(noopHandler, logger.NewNop())
 

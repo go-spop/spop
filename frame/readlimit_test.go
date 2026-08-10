@@ -33,7 +33,7 @@ func TestFrame_ReadLimit_acceptsTheLimitItself(t *testing.T) {
 	f := NewFrame()
 
 	// The body is absent, so this fails on the truncated read rather than the
-	// length check -- which is the point: the length itself was accepted.
+	// length check; which is the point: the length itself was accepted.
 	err := f.ReadLimit(bytes.NewReader(header(256, TypeHAProxyHello)), 256)
 	if errors.Is(err, ErrFrameTooBig) {
 		t.Fatal("a frame of exactly the limit was rejected as too big")
