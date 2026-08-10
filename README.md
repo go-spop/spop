@@ -46,10 +46,15 @@ Example implementation in go:
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"math/rand"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
     "github.com/go-spop/spop/action"
     "github.com/go-spop/spop/agent"
@@ -70,12 +75,42 @@ func main() {
 
 	a := agent.New(handler, logger.NewDefaultLog())
 
-	if err := a.Serve(listener); err != nil {
+	// Drain on SIGINT/SIGTERM: stop accepting, let in-flight handlers finish
+	// and their ACKs go out, say goodbye on every connection, then close.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	// Serve returns as soon as the listener closes, before the drain finishes.
+	// main waits on drained so the process does not exit -- and kill the
+	// Shutdown goroutine -- mid-drain.
+	drained := make(chan struct{})
+
+	go func() {
+		defer close(drained)
+		<-ctx.Done()
+
+		grace, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := a.Shutdown(grace); err != nil {
+			log.Printf("shutdown did not finish in time: %v\n", err)
+		}
+	}()
+
+	if err := a.Serve(listener); err != nil && !errors.Is(err, agent.ErrShutdown) {
 		log.Printf("error agent serve: %+v\n", err)
+		return
 	}
+
+	// Serve only returns ErrShutdown once Shutdown has been called, so this is
+	// reached only when something is actually draining.
+	<-drained
 }
 
-func handler(req *request.Request) {
+func handler(ctx context.Context, req *request.Request) {
+
+	// ctx is cancelled when the connection goes away or the agent shuts down.
+	// A handler doing slow work should select on ctx.Done() and give up.
 
 	log.Printf("handle request EngineID: '%s', StreamID: '%d', FrameID: '%d' with %d messages\n", req.EngineID, req.StreamID, req.FrameID, req.Messages.Len())
 

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -61,19 +62,38 @@ type Timeouts struct {
 // Config is everything a worker needs beyond its connection.
 type Config struct {
 	Registry *engine.Registry
-	Handler  func(*request.Request)
+	Handler  func(context.Context, *request.Request)
 	Logger   logger.Logger
 	Timeouts Timeouts
+
+	// BaseContext is the parent of this connection's context. Nil means
+	// context.Background(), so a zero-value Config behaves as it always has.
+	BaseContext context.Context
+
+	// Done is closed when the agent begins draining. Nil means this worker
+	// never drains: a non-blocking receive on a nil channel always takes the
+	// default branch, so a zero-value Config behaves as it always has.
+	Done <-chan struct{}
 }
 
 // Handle listen connection and process frames
 func Handle(conn *engine.Conn, cfg Config) {
+	base := cfg.BaseContext
+	if base == nil {
+		base = context.Background()
+	}
+
+	ctx, cancel := context.WithCancel(base)
+
 	w := &worker{
 		conn:     conn,
 		registry: cfg.Registry,
 		handler:  cfg.Handler,
 		logger:   cfg.Logger,
 		timeouts: cfg.Timeouts,
+		ctx:      ctx,
+		cancel:   cancel,
+		done:     cfg.Done,
 	}
 
 	if err := w.run(); err != nil {
@@ -87,7 +107,7 @@ type worker struct {
 	engine   *engine.Engine
 	ready    bool
 	engineID string
-	handler  func(*request.Request)
+	handler  func(context.Context, *request.Request)
 
 	// Negotiated during the HELLO handshake. maxFrameSize is the value the
 	// AGENT-HELLO announced and is recorded on the connection, which is what
@@ -108,8 +128,26 @@ type worker struct {
 	// reach the failure. The connection's own close is idempotent.
 	disconnectOnce sync.Once
 
+	// inflight counts the NOTIFY handlers dispatched from this connection. Add
+	// is only ever called from the read-loop goroutine and Wait runs in that
+	// same goroutine once the loop has stopped, so the WaitGroup reuse race
+	// cannot occur -- not by careful locking, but by construction.
+	inflight sync.WaitGroup
+
+	// deliverable records whether a sibling can still carry an in-flight ACK
+	// once this connection has left its engine. Written by leaveEngine and read
+	// by awaitDeliverable, both as run unwinds on the read-loop goroutine.
+	deliverable bool
+
 	logger   logger.Logger
 	timeouts Timeouts
+
+	// ctx is cancelled as run exits. A handler still working on a connection
+	// that has gone is computing a result nobody can receive.
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	done <-chan struct{}
 }
 
 func (w *worker) close() {
@@ -119,13 +157,40 @@ func (w *worker) close() {
 }
 
 // leaveEngine takes this connection out of its engine so no further ACK is
-// routed to it. Safe before the handshake, when there is no engine yet.
+// routed to it, and records whether anything is left that could carry one.
+// Safe before the handshake, when there is no engine yet.
 func (w *worker) leaveEngine() {
 	if w.engine == nil {
+		// No engine means no sibling: async was not negotiated, or the
+		// handshake never completed. This connection was the only route.
+		w.deliverable = false
 		return
 	}
 
-	w.registry.Leave(w.engine, w.conn)
+	// Leave reports the departure that emptied the engine. Until that one, a
+	// sibling remains for Engine.Write to route an ACK to.
+	w.deliverable = !w.registry.Leave(w.engine, w.conn)
+}
+
+// awaitDeliverable waits for in-flight handlers when a sibling can still carry
+// their ACKs -- section 3.2.1's async failover is exactly the case where a
+// handler outliving its own connection is still useful. When nothing can carry
+// them it returns at once, and the cancel that follows stops handlers whose
+// results nobody can receive.
+//
+// During a shutdown this wait is bounded: Agent.Shutdown's grace-period
+// expiry cancels the base context, which cancels the handlers and lets the
+// WaitGroup reach zero. Outside a shutdown there is no bound -- a connection
+// that dies while an async sibling remains, running a handler that never
+// returns, blocks here indefinitely, because this worker's own cancel (run's
+// deferred call) only happens after this wait returns. That is the deliberate
+// cost of not discarding a deliverable ACK.
+func (w *worker) awaitDeliverable() {
+	if !w.deliverable {
+		return
+	}
+
+	w.inflight.Wait()
 }
 
 // disconnect reports an agent-side error to the peer before the connection is
@@ -167,14 +232,63 @@ func (w *worker) readTimeout() time.Duration {
 	return w.timeouts.Idle
 }
 
+// shuttingDown reports whether the agent has begun draining. A nil done channel
+// blocks forever, so the default branch is taken and the answer is false.
+func (w *worker) shuttingDown() bool {
+	select {
+	case <-w.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// drain finishes the work already dispatched, lets its ACKs out, and says
+// goodbye. Section 3.2.9 requires the socket to close just after that frame,
+// which run's deferred close does.
+func (w *worker) drain() error {
+	w.inflight.Wait()
+	w.disconnect(statusCodeNormal, "agent is shutting down")
+
+	return nil
+}
+
 // armReadDeadline bounds the next frame read. A zero timeout clears any
 // deadline rather than setting one in the past.
 func (w *worker) armReadDeadline() error {
-	if d := w.readTimeout(); d > 0 {
-		return w.conn.SetReadDeadline(time.Now().Add(d))
+	// A drain that began while this loop was between reads: catching it here is
+	// a fast path that saves the syscall of arming a deadline this loop would
+	// only have to expire again. It is not what closes the shutdown-wakeup
+	// race -- every interleaving this check catches is also caught by the
+	// post-arm check below, which is the load-bearing one.
+	if w.shuttingDown() {
+		return w.conn.SetReadDeadline(time.Now())
 	}
 
-	return w.conn.SetReadDeadline(time.Time{})
+	var err error
+	if d := w.readTimeout(); d > 0 {
+		err = w.conn.SetReadDeadline(time.Now().Add(d))
+	} else {
+		err = w.conn.SetReadDeadline(time.Time{})
+	}
+	if err != nil {
+		return err
+	}
+
+	// Re-check after arming: Shutdown's poke can land between the check above
+	// and the SetReadDeadline just done, and the arm above -- Idle == 0 arms
+	// time.Time{}, an idle timeout arms a later deadline -- would silently
+	// erase or outlast that poke, parking this read with no way to wake it.
+	// Agent.Shutdown closes `done` strictly before it pokes any connection's
+	// deadline, so that ordering guarantees a poke able to land here already
+	// has `done` closed, which is exactly what this second check observes. Do
+	// not delete this as redundant with the check above: it is what makes the
+	// poke's wakeup reliable rather than racy.
+	if w.shuttingDown() {
+		return w.conn.SetReadDeadline(time.Now())
+	}
+
+	return nil
 }
 
 // advertisedCapabilities is what this connection's AGENT-HELLO claims.
@@ -187,7 +301,9 @@ func (w *worker) advertisedCapabilities() string {
 }
 
 func (w *worker) run() error {
+	defer w.cancel()
 	defer w.close()
+	defer w.awaitDeliverable()
 	defer w.leaveEngine()
 
 	var f *frame.Frame
@@ -206,6 +322,12 @@ func (w *worker) run() error {
 			frame.ReleaseFrame(f)
 			if err != io.EOF {
 				switch {
+				// A drain wakes the read loop the same way an idle timeout
+				// does, so the flag is what tells them apart. A shutdown must
+				// never report itself as section 3.5's code 2.
+				case errors.Is(err, os.ErrDeadlineExceeded) && w.shuttingDown():
+					return w.drain()
+
 				// The peer went quiet: before the handshake that is section
 				// 2.2's "timeout hello", after it "timeout idle". Either way
 				// section 3.5's code 2 names it.
@@ -291,6 +413,7 @@ func (w *worker) run() error {
 				return fmt.Errorf("worker not ready, but got Notify frame")
 			}
 
+			w.inflight.Add(1)
 			go w.processNotifyFrame(f)
 
 		default:

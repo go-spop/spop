@@ -49,19 +49,20 @@ func (r *Registry) Join(engineID string, c *Conn) *Engine {
 }
 
 // Leave removes a connection and forgets the engine once its last connection
-// has gone.
-func (r *Registry) Leave(e *Engine, c *Conn) {
+// has gone. It reports whether this connection was the last, which is how a
+// worker learns that no sibling remains to carry an in-flight ACK.
+func (r *Registry) Leave(e *Engine, c *Conn) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	empty := e.Remove(c)
 	if !empty {
-		return
+		return false
 	}
 
 	if e.ID() == "" {
 		r.unidentified--
-		return
+		return true
 	}
 
 	// Only forget this engine if the map still holds it. This is defensive: as
@@ -73,6 +74,8 @@ func (r *Registry) Leave(e *Engine, c *Conn) {
 	if current, ok := r.engines[e.ID()]; ok && current == e {
 		delete(r.engines, e.ID())
 	}
+
+	return true
 }
 
 func (r *Registry) Len() int {

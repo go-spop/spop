@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"context"
 	"encoding/binary"
 	"errors"
 	"io"
@@ -93,10 +94,10 @@ func haproxyHello(t *testing.T) *frame.Frame {
 func startWorker(t *testing.T) net.Conn {
 	t.Helper()
 
-	return startWorkerWith(t, func(*request.Request) {})
+	return startWorkerWith(t, func(context.Context, *request.Request) {})
 }
 
-func startWorkerWith(t *testing.T, handler func(*request.Request)) net.Conn {
+func startWorkerWith(t *testing.T, handler func(context.Context, *request.Request)) net.Conn {
 	t.Helper()
 
 	client, server := net.Pipe()

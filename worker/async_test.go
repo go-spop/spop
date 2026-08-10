@@ -2,6 +2,7 @@ package worker
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"net"
 	"testing"
@@ -83,7 +84,7 @@ func TestWorker_advertisesAsyncOnlyWhenNegotiated(t *testing.T) {
 func TestWorker_acksFailOverToASiblingConnection(t *testing.T) {
 	registry := engine.NewRegistry()
 
-	handler := func(r *request.Request) {
+	handler := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "answer", "42")
 	}
 
@@ -131,7 +132,7 @@ func TestWorker_acksFailOverToASiblingConnection(t *testing.T) {
 func TestWorker_acksPreferTheirOwnConnection(t *testing.T) {
 	registry := engine.NewRegistry()
 
-	handler := func(r *request.Request) {
+	handler := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "answer", "42")
 	}
 
@@ -176,7 +177,7 @@ func TestWorker_acksPreferTheirOwnConnection(t *testing.T) {
 func TestWorker_noFailoverWithoutTheAsyncCapability(t *testing.T) {
 	registry := engine.NewRegistry()
 
-	handler := func(r *request.Request) {
+	handler := func(_ context.Context, r *request.Request) {
 		r.Actions.SetVar(action.ScopeSession, "answer", "42")
 	}
 
@@ -247,7 +248,7 @@ func waitUntilJoined(t *testing.T, conn net.Conn, reader *bufio.Reader, streamID
 
 // startWorkerOn runs a worker sharing the given registry, so several
 // connections can join one engine.
-func startWorkerOn(t *testing.T, registry *engine.Registry, handler func(*request.Request)) net.Conn {
+func startWorkerOn(t *testing.T, registry *engine.Registry, handler func(context.Context, *request.Request)) net.Conn {
 	t.Helper()
 
 	client, server := net.Pipe()

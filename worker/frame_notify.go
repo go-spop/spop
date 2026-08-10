@@ -10,6 +10,7 @@ import (
 )
 
 func (w *worker) processNotifyFrame(f *frame.Frame) {
+	defer w.inflight.Done()
 	defer frame.ReleaseFrame(f)
 
 	req := request.AcquireRequest()
@@ -20,7 +21,7 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	req.EngineID = w.engineID
 	req.Messages = f.Messages
 
-	w.handler(req)
+	w.handler(w.ctx, req)
 
 	ackFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(ackFrame)
