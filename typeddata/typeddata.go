@@ -38,6 +38,9 @@ var ErrEmptyBuffer = errors.New("empty buffer for decode")
 // ErrDecodingBufferTooSmall describe error for too small decoding buffer
 var ErrDecodingBufferTooSmall = errors.New("decoding buffer too small")
 
+// ErrTruncatedVarint describes a varint whose continuation bytes are missing
+var ErrTruncatedVarint = errors.New("truncated varint")
+
 // Encode variable to TypedData value
 // returns filled buffer, count of bytes and error
 func Encode(data any, buf []byte) ([]byte, int, error) {
@@ -147,43 +150,71 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += l
 		data = int32(i)
 		return
 
 	case TypeUInt32:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += l
 		data = uint32(i)
 		return
 
 	case TypeInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += l
 		data = int64(i)
 		return
 
 	case TypeUInt64:
 		i, l := varint.Uvarint(buf)
+		if l < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += l
 		data = uint64(i)
 		return
 
 	case TypeIPv4:
-		data = net.IP(buf[:4])
-		n += 4
+		if len(buf) < net.IPv4len {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
+		data = net.IP(buf[:net.IPv4len])
+		n += net.IPv4len
 		return
 
 	case TypeIPv6:
-		data = net.IP(buf[:16])
-		n += 16
+		if len(buf) < net.IPv6len {
+			err = ErrDecodingBufferTooSmall
+			return
+		}
+		data = net.IP(buf[:net.IPv6len])
+		n += net.IPv6len
 		return
 
 	case TypeString:
 		sLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += i
 		buf = buf[i:]
-		if len(buf) < int(sLen) {
+		if uint64(len(buf)) < sLen {
 			err = ErrDecodingBufferTooSmall
 			return
 		}
@@ -193,9 +224,13 @@ func Decode(buf []byte) (data any, n int, err error) {
 
 	case TypeBinary:
 		dataLen, i := varint.Uvarint(buf)
+		if i < 0 {
+			err = ErrTruncatedVarint
+			return
+		}
 		n += i
 		buf = buf[i:]
-		if len(buf) < int(dataLen) {
+		if uint64(len(buf)) < dataLen {
 			err = ErrDecodingBufferTooSmall
 			return
 		}

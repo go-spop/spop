@@ -32,6 +32,10 @@ func (f *Frame) Read(src io.Reader) error {
 		return fmt.Errorf("unexpected frame type %d", f.Type)
 	}
 
+	if f.Len < minFrameLen || f.Len > MaxFrameSize {
+		return fmt.Errorf("invalid frame length %d", f.Len)
+	}
+
 	buf := make([]byte, f.Len-1)
 
 	n, err = io.ReadFull(src, buf)
@@ -47,9 +51,15 @@ func (f *Frame) Read(src io.Reader) error {
 	buf = buf[4:]
 
 	f.StreamID, n = varint.Uvarint(buf)
+	if n < 0 {
+		return fmt.Errorf("truncated STREAM-ID varint")
+	}
 	buf = buf[n:]
 
 	f.FrameID, n = varint.Uvarint(buf)
+	if n < 0 {
+		return fmt.Errorf("truncated FRAME-ID varint")
+	}
 	buf = buf[n:]
 
 	switch f.Type {
