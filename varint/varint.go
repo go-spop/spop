@@ -16,6 +16,12 @@ Variable-length integer (varint) are encoded using Peers encoding:
 
 */
 
+// MaxLen is the largest number of bytes PutUvarint can need. The first byte
+// carries 4 bits of the value and every byte after it carries 7, so a full
+// 64-bit value takes ceil((64-4)/7)+1 bytes. A destination buffer of this size
+// is never too small.
+const MaxLen = 10
+
 func PutUvarint(buf []byte, n uint64) int {
 	var p int
 
