@@ -9,7 +9,6 @@ import (
 
 func (w *worker) sendAgentHello(haproxyHello *frame.Frame, agreed negotiated) error {
 	var err error
-	var frameSize, n int
 
 	agentHello := frame.AcquireFrame()
 	defer frame.ReleaseFrame(agentHello)
@@ -20,22 +19,16 @@ func (w *worker) sendAgentHello(haproxyHello *frame.Frame, agreed negotiated) er
 
 	agentHello.KV.Add("version", version)
 	agentHello.KV.Add("max-frame-size", agreed.maxFrameSize)
-	agentHello.KV.Add("capabilities", capabilities)
+	agentHello.KV.Add("capabilities", w.advertisedCapabilities())
 
 	buf := bytes.NewBuffer(make([]byte, 0))
 
-	frameSize, err = agentHello.Encode(buf)
+	_, err = agentHello.Encode(buf)
 	if err != nil {
 		return fmt.Errorf("marshaling error: %v", err)
 	}
 
-	n, err = w.conn.Write(buf.Bytes())
-	if err != nil {
-		return fmt.Errorf("error write to connection: %v", err)
-	}
-	if n != frameSize {
-		return fmt.Errorf("write unexpected bytes count %d, expect %d", n, frameSize)
-	}
-
-	return nil
+	// This frame describes this connection's own state, so it is never routed
+	// to a sibling.
+	return w.conn.WriteFrame(buf.Bytes())
 }

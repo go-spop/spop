@@ -2,13 +2,11 @@ package worker
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/go-spop/spop/frame"
 )
 
 func (w *worker) sendAgentDisconnect(statusCode uint32, message string) error {
-	var frameSize, n int
 	var err error
 
 	agentDisconnectFrame := frame.AcquireFrame()
@@ -23,18 +21,12 @@ func (w *worker) sendAgentDisconnect(statusCode uint32, message string) error {
 	agentDisconnectFrame.KV.Add("message", message)
 
 	buf := &bytes.Buffer{}
-	frameSize, err = agentDisconnectFrame.Encode(buf)
+	_, err = agentDisconnectFrame.Encode(buf)
 	if err != nil {
 		return err
 	}
 
-	n, err = w.conn.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	if n != frameSize {
-		return fmt.Errorf("write unexpected bytes count %d, expect %d", n, frameSize)
-	}
-
-	return nil
+	// This frame describes this connection's own state, so it is never routed
+	// to a sibling.
+	return w.conn.WriteFrame(buf.Bytes())
 }

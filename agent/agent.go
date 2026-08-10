@@ -3,6 +3,7 @@ package agent
 import (
 	"net"
 
+	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
 	"github.com/go-spop/spop/worker"
@@ -10,16 +11,18 @@ import (
 
 func New(handler func(*request.Request), logger logger.Logger) *Agent {
 	agent := &Agent{
-		handler: handler,
-		logger:  logger,
+		handler:  handler,
+		logger:   logger,
+		registry: engine.NewRegistry(),
 	}
 
 	return agent
 }
 
 type Agent struct {
-	handler func(*request.Request)
-	logger  logger.Logger
+	handler  func(*request.Request)
+	logger   logger.Logger
+	registry *engine.Registry
 }
 
 func (agent *Agent) Serve(listener net.Listener) error {
@@ -32,6 +35,6 @@ func (agent *Agent) Serve(listener net.Listener) error {
 			return err
 		}
 
-		go worker.Handle(conn, agent.handler, agent.logger)
+		go worker.Handle(engine.NewConn(conn), agent.registry, agent.handler, agent.logger)
 	}
 }

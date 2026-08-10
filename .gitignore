@@ -22,3 +22,5 @@ graphify-out/
 
 # Added by ggshield
 .cache_ggshield
+# macOS
+.DS_Store
