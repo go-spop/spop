@@ -19,6 +19,10 @@ const MaxFrameSize = 1 << 20
 // 4-byte FLAGS field, before STREAM-ID and FRAME-ID.
 const minFrameLen = 5
 
+// frameLengthPrefix is the 4-byte FRAME-LENGTH field, which the length it
+// declares does not itself count.
+const frameLengthPrefix = 4
+
 const (
 	TypeUnset             Type = 0x00
 	TypeHAProxyHello      Type = 0x01
