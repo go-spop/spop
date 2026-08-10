@@ -2,15 +2,32 @@ package frame
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/go-spop/spop/varint"
 )
 
+// ErrFrameTooBig reports a frame whose declared length is above the maximum the
+// reader was given. Section 3.5 reserves status code 3 for this condition.
+var ErrFrameTooBig = errors.New("frame is too big")
+
+// Read decodes a frame, bounded by MaxFrameSize. Once a maximum has been
+// negotiated with the peer, use ReadLimit to apply it.
 func (f *Frame) Read(src io.Reader) error {
+	return f.ReadLimit(src, MaxFrameSize)
+}
+
+// ReadLimit decodes a frame, rejecting any whose declared length is above
+// limit. Section 3.2: "Frames cannot exceed a maximum size negotiated between
+// HAProxy and agents during the HELLO handshake." MaxFrameSize still applies as
+// an absolute ceiling, so a limit above it is capped rather than trusted.
+func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 	var n int
 	var err error
+
+	limit = min(limit, MaxFrameSize)
 
 	n, err = io.ReadFull(src, f.tmp[:])
 	if err != nil {
@@ -32,8 +49,12 @@ func (f *Frame) Read(src io.Reader) error {
 		return fmt.Errorf("unexpected frame type %d", f.Type)
 	}
 
-	if f.Len < minFrameLen || f.Len > MaxFrameSize {
+	if f.Len < minFrameLen {
 		return fmt.Errorf("invalid frame length %d", f.Len)
+	}
+
+	if f.Len > limit {
+		return fmt.Errorf("%w: %d exceeds the %d byte maximum", ErrFrameTooBig, f.Len, limit)
 	}
 
 	buf := make([]byte, f.Len-1)

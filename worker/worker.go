@@ -2,9 +2,11 @@ package worker
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net"
+	"sync"
 
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
@@ -13,11 +15,16 @@ import (
 
 const (
 	capabilities = "pipelining,async"
+
+	// frameLengthPrefix is the 4-byte FRAME-LENGTH field, which the length it
+	// declares does not itself count.
+	frameLengthPrefix = 4
 )
 
 // Status codes from SPOE 2.0 section 3.5.
 const (
 	statusCodeNormal         uint32 = 0
+	statusCodeFrameTooBig    uint32 = 3
 	statusCodeInvalidFrame   uint32 = 4
 	statusCodeNoVersion      uint32 = 5
 	statusCodeNoMaxFrameSize uint32 = 6
@@ -46,18 +53,25 @@ type worker struct {
 	handler  func(*request.Request)
 
 	// Negotiated during the HELLO handshake. maxFrameSize is the value the
-	// AGENT-HELLO announced; enforcing it on individual frames is not yet
-	// implemented.
+	// AGENT-HELLO announced, and bounds every frame afterwards in both
+	// directions. Written before the first NOTIFY goroutine is started.
 	peerCapabilities []string
 	maxFrameSize     uint32
+
+	// The peer is owed at most one AGENT-DISCONNECT, and the connection is
+	// closed once, however many goroutines reach the failure.
+	disconnectOnce sync.Once
+	closeOnce      sync.Once
 
 	logger logger.Logger
 }
 
 func (w *worker) close() {
-	if err := w.conn.Close(); err != nil {
-		w.logger.Errorf("close connection: %v", err)
-	}
+	w.closeOnce.Do(func() {
+		if err := w.conn.Close(); err != nil {
+			w.logger.Errorf("close connection: %v", err)
+		}
+	})
 }
 
 // disconnect reports an agent-side error to the peer before the connection is
@@ -65,10 +79,27 @@ func (w *worker) close() {
 // way, so a failure to send is logged rather than returned: it cannot change
 // what happens next, and the error that prompted the disconnect is the one
 // worth reporting.
+//
+// Only the first caller sends a frame. A NOTIFY goroutine that cannot write its
+// ACK tears the connection down, which makes the read loop fail in turn; the
+// peer is owed one AGENT-DISCONNECT describing the first error, not a second
+// describing the consequence.
 func (w *worker) disconnect(statusCode uint32, message string) {
-	if err := w.sendAgentDisconnect(statusCode, message); err != nil {
-		w.logger.Errorf("send AgentDisconnect frame: %v", err)
+	w.disconnectOnce.Do(func() {
+		if err := w.sendAgentDisconnect(statusCode, message); err != nil {
+			w.logger.Errorf("send AgentDisconnect frame: %v", err)
+		}
+	})
+}
+
+// frameLimit is the ceiling for frames in either direction. Before the
+// handshake settles one, the library's own maximum applies.
+func (w *worker) frameLimit() uint32 {
+	if w.maxFrameSize == 0 {
+		return frame.MaxFrameSize
 	}
+
+	return w.maxFrameSize
 }
 
 func (w *worker) run() error {
@@ -82,10 +113,16 @@ func (w *worker) run() error {
 	for {
 		f = frame.AcquireFrame()
 
-		if err := f.Read(buf); err != nil {
+		if err := f.ReadLimit(buf, w.frameLimit()); err != nil {
 			frame.ReleaseFrame(f)
 			if err != io.EOF {
-				w.disconnect(statusCodeInvalidFrame, "invalid frame received")
+				// A frame above the negotiated ceiling is code 3's own
+				// condition; anything else Read rejects is a malformed frame.
+				if errors.Is(err, frame.ErrFrameTooBig) {
+					w.disconnect(statusCodeFrameTooBig, err.Error())
+				} else {
+					w.disconnect(statusCodeInvalidFrame, "invalid frame received")
+				}
 				return fmt.Errorf("error read frame: %v", err)
 			}
 			return nil
