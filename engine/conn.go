@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 )
 
 // Conn is one connection to a peer. Writes are serialised across whole
@@ -22,6 +23,7 @@ type Conn struct {
 	mu           sync.RWMutex
 	closed       bool
 	maxFrameSize uint32
+	writeTimeout time.Duration
 }
 
 func NewConn(c net.Conn) *Conn {
@@ -34,13 +36,26 @@ func (c *Conn) Reader() io.Reader {
 	return c.conn
 }
 
-// WritePayload runs fn with exclusive use of the connection.
+// WritePayload runs fn with exclusive use of the connection. A write timeout,
+// when set, bounds the whole payload rather than each Write inside it -- the
+// callback is one payload, and a peer that stops reading half way through it
+// has wedged the connection just as surely as one that never read at all.
 func (c *Conn) WritePayload(fn func(io.Writer) error) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 
 	if c.IsClosed() {
 		return fmt.Errorf("connection is closed")
+	}
+
+	if d := c.WriteTimeout(); d > 0 {
+		if err := c.conn.SetWriteDeadline(time.Now().Add(d)); err != nil {
+			return err
+		}
+
+		// Clear it, or the deadline outlives this payload and expires the next
+		// write on this connection.
+		defer func() { _ = c.conn.SetWriteDeadline(time.Time{}) }()
 	}
 
 	return fn(c.conn)
@@ -105,4 +120,27 @@ func (c *Conn) MaxFrameSize() uint32 {
 	defer c.mu.RUnlock()
 
 	return c.maxFrameSize
+}
+
+// SetWriteTimeout bounds how long a payload may take to write. Zero disables
+// it, matching net.Conn deadline semantics. Called once at the construction
+// site before the connection is used, as SetMaxFrameSize is.
+func (c *Conn) SetWriteTimeout(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.writeTimeout = d
+}
+
+func (c *Conn) WriteTimeout() time.Duration {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	return c.writeTimeout
+}
+
+// SetReadDeadline lets the read loop bound its own next read. Only that one
+// goroutine reads from a connection, so this needs no serialisation of its own.
+func (c *Conn) SetReadDeadline(t time.Time) error {
+	return c.conn.SetReadDeadline(t)
 }

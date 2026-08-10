@@ -34,7 +34,7 @@ func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 		if err == io.EOF {
 			return err
 		}
-		return fmt.Errorf("error read frame size, %v", err)
+		return fmt.Errorf("error read frame size, %w", err)
 	}
 
 	f.Len = binary.BigEndian.Uint32(f.tmp[0:4])
@@ -61,7 +61,7 @@ func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 
 	n, err = io.ReadFull(src, buf)
 	if err != nil {
-		return fmt.Errorf("error read frame, %v", err)
+		return fmt.Errorf("error read frame, %w", err)
 	}
 
 	if uint32(n) != f.Len-1 {

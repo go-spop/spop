@@ -3,7 +3,11 @@ package frame
 import (
 	"bytes"
 	"errors"
+	"io"
+	"net"
+	"os"
 	"testing"
+	"time"
 )
 
 // header builds the 5 bytes Read consumes before it sizes anything: the
@@ -54,5 +58,42 @@ func TestFrame_Read_usesMaxFrameSize(t *testing.T) {
 	err := f.Read(bytes.NewReader(header(MaxFrameSize+1, TypeHAProxyHello)))
 	if !errors.Is(err, ErrFrameTooBig) {
 		t.Fatalf("expected ErrFrameTooBig, got %v", err)
+	}
+}
+
+// A deadline expiry has to survive Read's error formatting, or the worker
+// cannot tell a timeout from a malformed frame. %v severs the chain that
+// errors.Is walks; %w preserves it.
+func TestFrame_Read_preservesTheErrorChain(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	defer server.Close()
+
+	// A deadline already in the past makes the very first read fail.
+	if err := server.SetReadDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("setting the deadline: %v", err)
+	}
+
+	f := NewFrame()
+
+	err := f.Read(server)
+	if !errors.Is(err, os.ErrDeadlineExceeded) {
+		t.Fatalf("expected the deadline error to survive wrapping, got %v", err)
+	}
+}
+
+// The same must hold once the header has been read and the body read fails.
+func TestFrame_Read_preservesTheErrorChainOnTheBody(t *testing.T) {
+	// A 5-byte header declaring a 6-byte frame, followed by 2 of the 5 body
+	// bytes it promises. io.ReadFull reports a PARTIAL read as
+	// ErrUnexpectedEOF; with no body bytes at all it would report plain EOF,
+	// which is a different path.
+	input := []byte{0x00, 0x00, 0x00, 0x06, 0x01, 0xaa, 0xbb}
+
+	f := NewFrame()
+
+	err := f.Read(bytes.NewReader(input))
+	if !errors.Is(err, io.ErrUnexpectedEOF) {
+		t.Fatalf("expected the body read error to survive wrapping, got %v", err)
 	}
 }

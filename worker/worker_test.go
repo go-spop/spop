@@ -37,7 +37,11 @@ func TestWorker(t *testing.T) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), Config{
+			Registry: engine.NewRegistry(),
+			Handler:  m.Handle,
+			Logger:   logger.NewNop(),
+		})
 		m.Finish()
 	}()
 	if spoe.Init() != nil {
@@ -74,10 +78,18 @@ func TestWorkerConcurrent(t *testing.T) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), Config{
+			Registry: engine.NewRegistry(),
+			Handler:  m.Handle,
+			Logger:   logger.NewNop(),
+		})
 	}()
 	go func() {
-		Handle(engine.NewConn(server2), engine.NewRegistry(), m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server2), Config{
+			Registry: engine.NewRegistry(),
+			Handler:  m.Handle,
+			Logger:   logger.NewNop(),
+		})
 	}()
 	duration := time.Second
 	loop := func(s client.Client) {
@@ -117,7 +129,11 @@ func BenchmarkWorker(b *testing.B) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), engine.NewRegistry(), m.Handle, logger.NewNop())
+		Handle(engine.NewConn(server), Config{
+			Registry: engine.NewRegistry(),
+			Handler:  m.Handle,
+			Logger:   logger.NewNop(),
+		})
 		m.Finish()
 	}()
 

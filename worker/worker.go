@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
@@ -27,6 +29,7 @@ const (
 // Status codes from SPOE 2.0 section 3.5.
 const (
 	statusCodeNormal         uint32 = 0
+	statusCodeTimeout        uint32 = 2
 	statusCodeFrameTooBig    uint32 = 3
 	statusCodeInvalidFrame   uint32 = 4
 	statusCodeNoVersion      uint32 = 5
@@ -36,17 +39,45 @@ const (
 	statusCodeBadFrameSize   uint32 = 9
 )
 
+// Timeouts bound how long a connection may block. Zero disables a timeout,
+// matching net.Conn deadline semantics.
+//
+// Section 2.2 defines "timeout hello" and "timeout idle" as HAProxy-side
+// configuration naming two agent actions: emitting the AGENT-HELLO, and closing
+// an idle connection. Neither imposes an agent-side deadline, so these values
+// are the library's own policy rather than a conformance requirement.
+type Timeouts struct {
+	// Handshake bounds the HELLO exchange, from accept until the handshake
+	// completes.
+	Handshake time.Duration
+
+	// Idle closes a connection that has carried no frame for this long.
+	Idle time.Duration
+
+	// Write bounds a single payload write. Applied by engine.Conn.
+	Write time.Duration
+}
+
+// Config is everything a worker needs beyond its connection.
+type Config struct {
+	Registry *engine.Registry
+	Handler  func(*request.Request)
+	Logger   logger.Logger
+	Timeouts Timeouts
+}
+
 // Handle listen connection and process frames
-func Handle(conn *engine.Conn, registry *engine.Registry, handler func(*request.Request), logger logger.Logger) {
+func Handle(conn *engine.Conn, cfg Config) {
 	w := &worker{
 		conn:     conn,
-		registry: registry,
-		handler:  handler,
-		logger:   logger,
+		registry: cfg.Registry,
+		handler:  cfg.Handler,
+		logger:   cfg.Logger,
+		timeouts: cfg.Timeouts,
 	}
 
 	if err := w.run(); err != nil {
-		logger.Errorf("handle worker: %v", err)
+		cfg.Logger.Errorf("handle worker: %v", err)
 	}
 }
 
@@ -77,7 +108,8 @@ type worker struct {
 	// reach the failure. The connection's own close is idempotent.
 	disconnectOnce sync.Once
 
-	logger logger.Logger
+	logger   logger.Logger
+	timeouts Timeouts
 }
 
 func (w *worker) close() {
@@ -124,6 +156,27 @@ func (w *worker) frameLimit() uint32 {
 	return w.maxFrameSize
 }
 
+// readTimeout is the handshake bound until the HELLO completes and the idle
+// bound afterwards, which is how one deadline serves both of section 2.2's
+// directives.
+func (w *worker) readTimeout() time.Duration {
+	if !w.ready {
+		return w.timeouts.Handshake
+	}
+
+	return w.timeouts.Idle
+}
+
+// armReadDeadline bounds the next frame read. A zero timeout clears any
+// deadline rather than setting one in the past.
+func (w *worker) armReadDeadline() error {
+	if d := w.readTimeout(); d > 0 {
+		return w.conn.SetReadDeadline(time.Now().Add(d))
+	}
+
+	return w.conn.SetReadDeadline(time.Time{})
+}
+
 // advertisedCapabilities is what this connection's AGENT-HELLO claims.
 func (w *worker) advertisedCapabilities() string {
 	if !w.async {
@@ -144,16 +197,31 @@ func (w *worker) run() error {
 	for {
 		f = frame.AcquireFrame()
 
+		if err := w.armReadDeadline(); err != nil {
+			frame.ReleaseFrame(f)
+			return fmt.Errorf("error set read deadline: %v", err)
+		}
+
 		if err := f.ReadLimit(buf, w.frameLimit()); err != nil {
 			frame.ReleaseFrame(f)
 			if err != io.EOF {
+				switch {
+				// The peer went quiet: before the handshake that is section
+				// 2.2's "timeout hello", after it "timeout idle". Either way
+				// section 3.5's code 2 names it.
+				case errors.Is(err, os.ErrDeadlineExceeded):
+					w.disconnect(statusCodeTimeout, "timeout waiting for a frame")
+
 				// A frame above the negotiated ceiling is code 3's own
-				// condition; anything else Read rejects is a malformed frame.
-				if errors.Is(err, frame.ErrFrameTooBig) {
+				// condition.
+				case errors.Is(err, frame.ErrFrameTooBig):
 					w.disconnect(statusCodeFrameTooBig, err.Error())
-				} else {
+
+				// Anything else Read rejects is a malformed frame.
+				default:
 					w.disconnect(statusCodeInvalidFrame, "invalid frame received")
 				}
+
 				return fmt.Errorf("error read frame: %v", err)
 			}
 			return nil
