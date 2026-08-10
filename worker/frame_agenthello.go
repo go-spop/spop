@@ -7,7 +7,7 @@ import (
 	"github.com/go-spop/spop/frame"
 )
 
-func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
+func (w *worker) sendAgentHello(haproxyHello *frame.Frame, agreed negotiated) error {
 	var err error
 	var frameSize, n int
 
@@ -18,8 +18,8 @@ func (w *worker) sendAgentHello(haproxyHello *frame.Frame) error {
 	agentHello.FrameID = haproxyHello.FrameID
 	agentHello.StreamID = haproxyHello.StreamID
 
-	agentHello.KV.Add("version", "2.0")
-	agentHello.KV.Add("max-frame-size", haproxyHello.MaxFrameSize)
+	agentHello.KV.Add("version", version)
+	agentHello.KV.Add("max-frame-size", agreed.maxFrameSize)
 	agentHello.KV.Add("capabilities", capabilities)
 
 	buf := bytes.NewBuffer(make([]byte, 0))

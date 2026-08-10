@@ -17,8 +17,13 @@ const (
 
 // Status codes from SPOE 2.0 section 3.5.
 const (
-	statusCodeNormal       uint32 = 0
-	statusCodeInvalidFrame uint32 = 4
+	statusCodeNormal         uint32 = 0
+	statusCodeInvalidFrame   uint32 = 4
+	statusCodeNoVersion      uint32 = 5
+	statusCodeNoMaxFrameSize uint32 = 6
+	statusCodeNoCapabilities uint32 = 7
+	statusCodeBadVersion     uint32 = 8
+	statusCodeBadFrameSize   uint32 = 9
 )
 
 // Handle listen connection and process frames
@@ -39,6 +44,12 @@ type worker struct {
 	ready    bool
 	engineID string
 	handler  func(*request.Request)
+
+	// Negotiated during the HELLO handshake. maxFrameSize is the value the
+	// AGENT-HELLO announced; enforcing it on individual frames is not yet
+	// implemented.
+	peerCapabilities []string
+	maxFrameSize     uint32
 
 	logger logger.Logger
 }
@@ -88,7 +99,17 @@ func (w *worker) run() error {
 				return fmt.Errorf("worker already ready, but got HAProxyHello frame")
 			}
 
-			if err := w.sendAgentHello(f); err != nil {
+			agreed, disconnectErr := negotiate(f)
+			if disconnectErr != nil {
+				frame.ReleaseFrame(f)
+				w.disconnect(disconnectErr.code, disconnectErr.message)
+				return fmt.Errorf("handshake failed: %w", disconnectErr)
+			}
+
+			w.peerCapabilities = agreed.capabilities
+			w.maxFrameSize = agreed.maxFrameSize
+
+			if err := w.sendAgentHello(f, agreed); err != nil {
 				frame.ReleaseFrame(f)
 				// The AGENT-HELLO could not be written, so an AGENT-DISCONNECT
 				// cannot be either. Section 3.2.3's "error during the HELLO

@@ -28,7 +28,8 @@ func (c *Client) Init() error {
 	f.Type = frame.TypeHAProxyHello
 	f.StreamID = 0
 	f.FrameID = 0
-	f.KV.Add("supported-versions", "2")
+	// Section 3.2.4 requires the "Major.Minor" format, not a bare major.
+	f.KV.Add("supported-versions", "2.0")
 	f.KV.Add("max-frame-size", uint32(16*1024))
 	f.KV.Add("capabilities", "")
 

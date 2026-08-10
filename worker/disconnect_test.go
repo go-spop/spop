@@ -105,7 +105,7 @@ func startWorker(t *testing.T) net.Conn {
 	return client
 }
 
-func assertAgentDisconnect(t *testing.T, got agentFrame) {
+func assertAgentDisconnect(t *testing.T, got agentFrame, wantCode uint32) {
 	t.Helper()
 
 	if got.frameType != frame.TypeAgentDisconnect {
@@ -117,8 +117,8 @@ func assertAgentDisconnect(t *testing.T, got agentFrame) {
 		t.Fatal("the AGENT-DISCONNECT carried no status-code")
 	}
 
-	if code != wantStatusCodeInvalidFrame {
-		t.Fatalf("expected status-code %d, got %v (%T)", wantStatusCodeInvalidFrame, code, code)
+	if code != wantCode {
+		t.Fatalf("expected status-code %d, got %v (%T)", wantCode, code, code)
 	}
 
 	if _, ok := got.kv.Get("message"); !ok {
@@ -152,7 +152,7 @@ func TestWorker_agentDisconnectOnFrameBeforeHandshake(t *testing.T) {
 				t.Fatalf("writing the frame: %v", err)
 			}
 
-			assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)))
+			assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
 		})
 	}
 }
@@ -165,7 +165,7 @@ func TestWorker_agentDisconnectOnUnreadableFrame(t *testing.T) {
 		t.Fatalf("writing the frame: %v", err)
 	}
 
-	assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)))
+	assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
 }
 
 // The healthcheck is the one case where closing without an AGENT-DISCONNECT is
@@ -215,5 +215,5 @@ func TestWorker_agentDisconnectOnDuplicateHello(t *testing.T) {
 		t.Fatalf("writing the second HELLO: %v", err)
 	}
 
-	assertAgentDisconnect(t, readAgentFrame(t, reader))
+	assertAgentDisconnect(t, readAgentFrame(t, reader), wantStatusCodeInvalidFrame)
 }
