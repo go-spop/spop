@@ -44,6 +44,16 @@ const (
 	TypeAgentAck          Type = 0x67
 )
 
+// FromHAProxy and FromAgent are the FRAME-TYPEs each side of section 3.2's
+// exchange sends. A reader given one of these refuses the other direction's
+// frames from the FRAME-TYPE byte alone, before a body is allocated or
+// decoded: an agent has no answer for an AGENT-ACK and a client has none for a
+// NOTIFY, so neither is worth the work of reading.
+var (
+	FromHAProxy = []Type{TypeHAProxyHello, TypeHAProxyDisconnect, TypeNotify}
+	FromAgent   = []Type{TypeAgentHello, TypeAgentDisconnect, TypeAgentAck}
+)
+
 var framePool = sync.Pool{
 	New: func() any {
 		return NewFrame()

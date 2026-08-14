@@ -341,7 +341,7 @@ func (w *worker) run() error {
 			return fmt.Errorf("error set read deadline: %v", err)
 		}
 
-		if err := f.ReadLimit(buf, w.frameLimit()); err != nil {
+		if err := f.ReadLimit(buf, w.frameLimit(), frame.FromHAProxy); err != nil {
 			frame.ReleaseFrame(f)
 			if err != io.EOF {
 				switch {
@@ -476,14 +476,12 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 
 		return true, false, nil
 
-	// frame.Read decodes both directions, so the agent-side types reach here
-	// too: an AGENT-HELLO, AGENT-DISCONNECT or AGENT-ACK arriving at an agent
-	// is a peer sending its own half of the protocol back, which is section
-	// 3.2's roles reversed and nothing this connection can answer. A skip would
-	// be a lie: it would leave the peer waiting on a reply nothing produced.
-	// Section 3.2.2's "unknown frames may be silently skipped" is a MAY and
-	// applies to types Read does not recognise at all, which it rejects before
-	// this switch ever sees them.
+	// Defensive rather than expected: run reads with frame.FromHAProxy, so a
+	// type this switch does not handle is refused at the header and never
+	// arrives. Kept because the alternative is worse than dead code; were the
+	// gate ever widened, a skip here would leave the peer waiting on a reply
+	// nothing produced. Section 3.2.2's "unknown frames may be silently
+	// skipped" is a MAY, and the reader is where it would belong.
 	default:
 		w.disconnect(statusCodeInvalidFrame, "unexpected frame type")
 

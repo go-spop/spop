@@ -40,7 +40,7 @@ func (c *Client) Init() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	if err := responseFrame.Read(c.reader); err != nil {
+	if err := responseFrame.ReadLimit(c.reader, frame.MaxFrameSize, frame.FromAgent); err != nil {
 		return fmt.Errorf("error read AgentHello frame: %w", err)
 	}
 
@@ -88,7 +88,7 @@ func (c *Client) Notify() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	if err := responseFrame.Read(c.reader); err != nil {
+	if err := responseFrame.ReadLimit(c.reader, frame.MaxFrameSize, frame.FromAgent); err != nil {
 		return fmt.Errorf("error read AgentAck frame: %w", err)
 	}
 
@@ -116,7 +116,7 @@ func (c *Client) Stop() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	if err := responseFrame.Read(c.reader); err != nil {
+	if err := responseFrame.ReadLimit(c.reader, frame.MaxFrameSize, frame.FromAgent); err != nil {
 		return fmt.Errorf("error read AgentDisconnect frame: %w", err)
 	}
 

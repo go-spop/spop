@@ -14,17 +14,23 @@ import (
 // reader was given. Section 3.5 reserves status code 3 for this condition.
 var ErrFrameTooBig = errors.New("frame is too big")
 
-// Read decodes a frame, bounded by MaxFrameSize. Once a maximum has been
-// negotiated with the peer, use ReadLimit to apply it.
+// Read decodes a frame of any type this package understands, bounded by
+// MaxFrameSize. Once a maximum has been negotiated with the peer, or the
+// direction the frame must have come from is known, use ReadLimit.
 func (f *Frame) Read(src io.Reader) error {
-	return f.ReadLimit(src, MaxFrameSize)
+	return f.ReadLimit(src, MaxFrameSize, nil)
 }
 
 // ReadLimit decodes a frame, rejecting any whose declared length is above
 // limit. Section 3.2: "Frames cannot exceed a maximum size negotiated between
 // HAProxy and agents during the HELLO handshake." MaxFrameSize still applies as
 // an absolute ceiling, so a limit above it is capped rather than trusted.
-func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
+//
+// accept bounds the FRAME-TYPEs this read will take, and is checked against the
+// header before any body is allocated or decoded; FromHAProxy and FromAgent are
+// the two sets worth passing. A nil accept takes every type this package can
+// decode, which is what Read does.
+func (f *Frame) ReadLimit(src io.Reader, limit uint32, accept []Type) error {
 	var n int
 	var err error
 
@@ -48,6 +54,12 @@ func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 	case TypeHAProxyHello, TypeHAProxyDisconnect, TypeNotify, TypeAgentHello, TypeAgentDisconnect, TypeAgentAck:
 	default:
 		return fmt.Errorf("unexpected frame type %d", f.Type)
+	}
+
+	// Same reason, one step further: a type this reader will not act on costs
+	// nothing beyond the header it has already read.
+	if !acceptsType(accept, f.Type) {
+		return fmt.Errorf("unexpected frame type %d from this peer", f.Type)
 	}
 
 	if f.Len < minFrameLen {
@@ -140,4 +152,21 @@ func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 	}
 
 	return nil
+}
+
+// acceptsType reports whether t is in accept. A nil accept is "no restriction"
+// rather than "nothing": the sets are a caller's declaration of what it can act
+// on, and a caller that declares nothing has not asked to be restricted.
+func acceptsType(accept []Type, t Type) bool {
+	if accept == nil {
+		return true
+	}
+
+	for _, allowed := range accept {
+		if allowed == t {
+			return true
+		}
+	}
+
+	return false
 }
