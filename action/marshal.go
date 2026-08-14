@@ -23,7 +23,7 @@ func (action *Action) Marshal(buf []byte) ([]byte, error) {
 	buf = append(buf, nb)
 	buf = append(buf, byte(action.Scope))
 
-	b := make([]byte, 10)
+	b := make([]byte, varint.MaxLen)
 	n := varint.PutUvarint(b, uint64(len(action.Name)))
 
 	buf = append(buf, b[:n]...)

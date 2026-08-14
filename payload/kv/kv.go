@@ -36,7 +36,7 @@ type KV struct {
 func NewKV() *KV {
 	kv := &KV{
 		m:   make([]Item, 0),
-		tmp: make([]byte, 10),
+		tmp: make([]byte, varint.MaxLen),
 	}
 
 	return kv
