@@ -1,6 +1,7 @@
 package typeddata
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"net"
@@ -223,7 +224,7 @@ func Decode(buf []byte) (data any, n int, err error) {
 			err = ErrDecodingBufferTooSmall
 			return
 		}
-		data = net.IP(buf[:net.IPv4len])
+		data = net.IP(bytes.Clone(buf[:net.IPv4len]))
 		n += net.IPv4len
 		return
 
@@ -232,7 +233,7 @@ func Decode(buf []byte) (data any, n int, err error) {
 			err = ErrDecodingBufferTooSmall
 			return
 		}
-		data = net.IP(buf[:net.IPv6len])
+		data = net.IP(bytes.Clone(buf[:net.IPv6len]))
 		n += net.IPv6len
 		return
 
@@ -264,7 +265,7 @@ func Decode(buf []byte) (data any, n int, err error) {
 			err = ErrDecodingBufferTooSmall
 			return
 		}
-		data = buf[:dataLen]
+		data = bytes.Clone(buf[:dataLen])
 		n += int(dataLen)
 		return
 	}
