@@ -4,15 +4,7 @@ import (
 	"testing"
 )
 
-// The Peers varint encodes 4 bits in its first byte and 7 in each byte after,
-// so a full 64-bit value needs 10 bytes. Converting a negative signed value to
-// uint64 sign-extends it; int32(-1) becomes 2^64-1; so every negative value
-// takes the longest encoding there is.
-//
-// Encode must produce a value Decode returns unchanged, for the whole range of
-// each type it accepts.
-
-func TestEncode_numericRoundTrip(t *testing.T) {
+func TestEncodeNumericRoundTrip(t *testing.T) {
 	tests := []struct {
 		name   string
 		value  any
@@ -27,7 +19,6 @@ func TestEncode_numericRoundTrip(t *testing.T) {
 		{"int64 minimum", int64(-9223372036854775808), int64(-9223372036854775808)},
 		{"int64 maximum", int64(9223372036854775807), int64(9223372036854775807)},
 
-		// int encodes as INT64, so it decodes back as int64.
 		{"int negative", int(-3), int64(-3)},
 		{"int maximum", int(9223372036854775807), int64(9223372036854775807)},
 
@@ -35,7 +26,6 @@ func TestEncode_numericRoundTrip(t *testing.T) {
 		{"uint64 maximum", ^uint64(0), ^uint64(0)},
 		{"uint64 above the 8-byte varint range", uint64(1) << 60, uint64(1) << 60},
 
-		// uint encodes as UINT64, so it decodes back as uint64.
 		{"uint maximum", ^uint(0), ^uint64(0)},
 	}
 

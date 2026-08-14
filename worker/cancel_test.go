@@ -10,10 +10,7 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-// A handler whose connection has gone away is computing a result nobody can
-// receive. The worker cancels its context as it exits, which is the handler's
-// cue to stop.
-func TestWorker_cancelsHandlersWhenTheConnectionGoes(t *testing.T) {
+func TestWorkerCancelsHandlersWhenTheConnectionGoes(t *testing.T) {
 	entered := make(chan struct{})
 	stopped := make(chan struct{})
 
@@ -52,8 +49,6 @@ func TestWorker_cancelsHandlersWhenTheConnectionGoes(t *testing.T) {
 		t.Fatal("the handler never ran")
 	}
 
-	// The peer goes away: the worker's read fails, run unwinds, and the
-	// connection context is cancelled.
 	if err := conn.Close(); err != nil {
 		t.Fatalf("closing the connection: %v", err)
 	}

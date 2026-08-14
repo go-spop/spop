@@ -16,34 +16,7 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-// SPOE 2.0 section 3.5 reserves status code 2 for "a timeout occurred". Nothing
-// in the library could emit it before, because nothing set a timeout.
-const wantStatusCodeTimeout = uint32(2)
-
-// startWorkerTimeouts runs a worker with the given deadlines and hands the test
-// the other end of the pipe.
-func startWorkerTimeouts(t *testing.T, timeouts Timeouts) net.Conn {
-	t.Helper()
-
-	client, server := net.Pipe()
-
-	go Handle(engine.NewConn(server), Config{
-		Handler:  func(context.Context, *request.Request) {},
-		Logger:   logger.NewNop(),
-		Timeouts: timeouts,
-	})
-
-	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
-		t.Fatalf("setting the deadline: %v", err)
-	}
-
-	t.Cleanup(func() { client.Close() })
-
-	return client
-}
-
-// A peer that connects and says nothing must not hold a worker forever.
-func TestWorker_handshakeTimeoutDisconnects(t *testing.T) {
+func TestWorkerHandshakeTimeoutDisconnects(t *testing.T) {
 	conn := startWorkerTimeouts(t, Timeouts{Handshake: 50 * time.Millisecond})
 	reader := bufio.NewReader(conn)
 
@@ -54,9 +27,7 @@ func TestWorker_handshakeTimeoutDisconnects(t *testing.T) {
 	}
 }
 
-// After a completed handshake the idle timeout takes over, and its expiry is
-// the agent-initiated close section 2.2's "timeout idle" waits for.
-func TestWorker_idleTimeoutDisconnects(t *testing.T) {
+func TestWorkerIdleTimeoutDisconnects(t *testing.T) {
 	conn := startWorkerTimeouts(t, Timeouts{Idle: 50 * time.Millisecond})
 	reader := bufio.NewReader(conn)
 
@@ -78,9 +49,7 @@ func TestWorker_idleTimeoutDisconnects(t *testing.T) {
 	}
 }
 
-// The handshake deadline must not survive the handshake. With a short handshake
-// timeout and idle disabled, a connection that completed its HELLO stays up.
-func TestWorker_handshakeTimeoutDoesNotOutliveTheHandshake(t *testing.T) {
+func TestWorkerHandshakeTimeoutDoesNotOutliveTheHandshake(t *testing.T) {
 	conn := startWorkerTimeouts(t, Timeouts{Handshake: 50 * time.Millisecond})
 	reader := bufio.NewReader(conn)
 
@@ -98,8 +67,7 @@ func TestWorker_handshakeTimeoutDoesNotOutliveTheHandshake(t *testing.T) {
 	assertStaysOpen(t, conn, reader)
 }
 
-// Zero disables. A quiet connection with no idle timeout is not closed.
-func TestWorker_zeroIdleTimeoutNeverFires(t *testing.T) {
+func TestWorkerZeroIdleTimeoutNeverFires(t *testing.T) {
 	conn := startWorkerTimeouts(t, Timeouts{})
 	reader := bufio.NewReader(conn)
 
@@ -117,9 +85,28 @@ func TestWorker_zeroIdleTimeoutNeverFires(t *testing.T) {
 	assertStaysOpen(t, conn, reader)
 }
 
-// assertStaysOpen gives a short-timeout worker several times its deadline to
-// misbehave, then confirms nothing arrived and the connection is still usable.
-// The assertion is on WHAT happened; no frame, no EOF; not on timing.
+const wantStatusCodeTimeout = uint32(2)
+
+func startWorkerTimeouts(t *testing.T, timeouts Timeouts) net.Conn {
+	t.Helper()
+
+	client, server := net.Pipe()
+
+	go Handle(engine.NewConn(server), Config{
+		Handler:  func(context.Context, *request.Request) {},
+		Logger:   logger.NewNop(),
+		Timeouts: timeouts,
+	})
+
+	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatalf("setting the deadline: %v", err)
+	}
+
+	t.Cleanup(func() { client.Close() })
+
+	return client
+}
+
 func assertStaysOpen(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 	t.Helper()
 
@@ -137,9 +124,6 @@ func assertStaysOpen(t *testing.T, conn net.Conn, reader *bufio.Reader) {
 		t.Fatal("a frame arrived when no timeout should have fired")
 	}
 
-	// The pass case is the TEST's own read deadline and nothing else. Accepting
-	// any non-EOF error here would let an unrelated failure; a reset, a
-	// closed pipe; masquerade as the connection staying healthy.
 	if !errors.Is(err, os.ErrDeadlineExceeded) {
 		t.Fatalf("expected the test's own read deadline, got %v", err)
 	}

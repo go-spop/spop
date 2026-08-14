@@ -6,30 +6,7 @@ import (
 	"github.com/go-spop/spop/message"
 )
 
-// borrowedMessages stands in for the Messages a Frame owns and a Request only
-// points at. Built from the pool, as a decoded frame's are, so releasing it is
-// legal; Messages.Reset returns every entry to the message pool.
-func borrowedMessages(t *testing.T) *message.Messages {
-	t.Helper()
-
-	m := message.AcquireMessage()
-	m.Name = "check-client-ip"
-
-	owned := message.NewMessages()
-	*owned = append(*owned, m)
-
-	// The owner releases them; nothing else may.
-	t.Cleanup(owned.Reset)
-
-	return owned
-}
-
-// A Request borrows the Messages of the frame it describes; it does not own
-// them. Reset must drop the reference rather than reach into an object
-// belonging to someone else; Messages.Reset returns every entry to the
-// message pool, so a Request doing it is releasing the frame's messages out
-// from under the frame.
-func TestRequest_ResetDropsTheBorrowedMessages(t *testing.T) {
+func TestRequestResetDropsTheBorrowedMessages(t *testing.T) {
 	borrowed := borrowedMessages(t)
 
 	req := AcquireRequest()
@@ -46,9 +23,7 @@ func TestRequest_ResetDropsTheBorrowedMessages(t *testing.T) {
 	}
 }
 
-// The same through the pool's own entry point, which is how every caller
-// reaches it.
-func TestRequest_ReleaseDoesNotResetTheOwnersMessages(t *testing.T) {
+func TestRequestReleaseDoesNotResetTheOwnersMessages(t *testing.T) {
 	borrowed := borrowedMessages(t)
 
 	req := AcquireRequest()
@@ -61,9 +36,7 @@ func TestRequest_ReleaseDoesNotResetTheOwnersMessages(t *testing.T) {
 	}
 }
 
-// The rest of Reset must still clear, or a pooled Request leaks one request's
-// identifiers into the next.
-func TestRequest_ResetClearsEverythingElse(t *testing.T) {
+func TestRequestResetClearsEverythingElse(t *testing.T) {
 	req := AcquireRequest()
 
 	req.EngineID = "engine-1"
@@ -75,4 +48,18 @@ func TestRequest_ResetClearsEverythingElse(t *testing.T) {
 	if req.EngineID != "" || req.StreamID != 0 || req.FrameID != 0 {
 		t.Fatalf("expected the identifiers cleared, got %q %d %d", req.EngineID, req.StreamID, req.FrameID)
 	}
+}
+
+func borrowedMessages(t *testing.T) *message.Messages {
+	t.Helper()
+
+	m := message.AcquireMessage()
+	m.Name = "check-client-ip"
+
+	owned := message.NewMessages()
+	*owned = append(*owned, m)
+
+	t.Cleanup(owned.Reset)
+
+	return owned
 }

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestEncode_Nil(t *testing.T) {
+func TestEncodeNil(t *testing.T) {
 	buf, n, err := Encode(nil, make([]byte, 0))
 	if err != nil {
 		t.Fatal("unexpected error")
@@ -21,7 +21,7 @@ func TestEncode_Nil(t *testing.T) {
 	}
 }
 
-func TestEncode_Bool(t *testing.T) {
+func TestEncodeBool(t *testing.T) {
 	buf, n, err := Encode(false, make([]byte, 0))
 	if err != nil {
 		t.Fatal("unexpected error")
@@ -51,7 +51,7 @@ func TestEncode_Bool(t *testing.T) {
 	}
 }
 
-func TestEncode_Int32(t *testing.T) {
+func TestEncodeInt32(t *testing.T) {
 	buf, n, err := Encode(int32(100500), make([]byte, 0))
 	if err != nil {
 		t.Fatal("unexpected error")
@@ -67,7 +67,7 @@ func TestEncode_Int32(t *testing.T) {
 	}
 }
 
-func TestEncode_Binary(t *testing.T) {
+func TestEncodeBinary(t *testing.T) {
 	buf, n, err := Encode([]byte{0x10, 0x20, 0x30}, make([]byte, 0))
 	if err != nil {
 		t.Fatal("unexpected error")

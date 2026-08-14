@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestFrame_Write(t *testing.T) {
+func TestFrameWrite(t *testing.T) {
 	f := NewFrame()
 	f.Type = TypeAgentDisconnect
 	f.FrameID = 123
@@ -37,7 +37,7 @@ func TestFrame_Write(t *testing.T) {
 	}
 }
 
-func BenchmarkFrame_Encode(b *testing.B) {
+func BenchmarkFrameEncode(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
