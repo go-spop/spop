@@ -41,6 +41,10 @@ var ErrDecodingBufferTooSmall = errors.New("decoding buffer too small")
 // ErrTruncatedVarint describes a varint whose continuation bytes are missing
 var ErrTruncatedVarint = errors.New("truncated varint")
 
+// ErrInvalidIP describes a net.IP that is neither of the two widths section 3.1
+// gives a type to: IN_ADDR's 4 bytes and IN_ADDR6's 16.
+var ErrInvalidIP = errors.New("net.IP is neither a 4-byte nor a 16-byte address")
+
 // Encode variable to TypedData value
 // returns filled buffer, count of bytes and error
 func Encode(data any, buf []byte) ([]byte, int, error) {
@@ -111,6 +115,32 @@ func Encode(data any, buf []byte) ([]byte, int, error) {
 		buf = append(buf, b[:i]...)
 		buf = append(buf, v...)
 		return buf, n, nil
+
+	case net.IP:
+		// Which type an address takes is decided by the address, not by the
+		// width of the net.IP holding it: net.ParseIP keeps an IPv4 address in
+		// the 16-byte v4-in-v6 form, and section 3.1's IN_ADDR is 4 bytes. To4
+		// returns nil for anything that is not an IPv4 address, which is what
+		// separates the two cases.
+		if v4 := v.To4(); v4 != nil {
+			buf = append(buf, TypeIPv4)
+			buf = append(buf, v4...)
+
+			return buf, 1 + net.IPv4len, nil
+		}
+
+		// To16 accepts the 4-byte form too, so the IPv4 case above has to come
+		// first. What reaches here is a genuine IPv6 address or a net.IP of a
+		// length section 3.1 has no type for, including the nil one.
+		v6 := v.To16()
+		if v6 == nil {
+			return nil, 0, fmt.Errorf("%w: %d bytes", ErrInvalidIP, len(v))
+		}
+
+		buf = append(buf, TypeIPv6)
+		buf = append(buf, v6...)
+
+		return buf, 1 + net.IPv6len, nil
 
 	case []byte:
 		n = 1

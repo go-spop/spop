@@ -2,6 +2,7 @@ package action
 
 import (
 	"bytes"
+	"net"
 	"testing"
 )
 
@@ -39,6 +40,33 @@ func TestAction_Marshal_wireBytes(t *testing.T) {
 				0x01,                                         // VAR-SCOPE: session
 				0x08, 'i', 'p', '_', 's', 'c', 'o', 'r', 'e', // VAR-NAME
 				0x03, 0x09, // VAR-VALUE: UINT32 typed data
+			},
+		},
+		// The reason an agent needs to encode an address at all: HAProxy sends
+		// one, the handler decides something about it, and the answer goes back
+		// as an IP-typed variable.
+		{
+			name:   "set-var carries an IPv4 value",
+			action: NewSetVar(ScopeSession, "client", net.ParseIP("192.0.2.1")),
+			expect: []byte{
+				0x01,                               // ACTION-TYPE: SET-VAR
+				0x03,                               // NB-ARGS: scope, name and value
+				0x01,                               // VAR-SCOPE: session
+				0x06, 'c', 'l', 'i', 'e', 'n', 't', // VAR-NAME
+				0x06, 192, 0, 2, 1, // VAR-VALUE: IPV4 typed data
+			},
+		},
+		{
+			name:   "set-var carries an IPv6 value",
+			action: NewSetVar(ScopeSession, "client", net.ParseIP("2001:db8::1")),
+			expect: []byte{
+				0x01,                               // ACTION-TYPE: SET-VAR
+				0x03,                               // NB-ARGS: scope, name and value
+				0x01,                               // VAR-SCOPE: session
+				0x06, 'c', 'l', 'i', 'e', 'n', 't', // VAR-NAME
+				0x07, // VAR-VALUE: IPV6 typed data
+				0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0, 0x01,
 			},
 		},
 	}
