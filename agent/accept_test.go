@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -13,7 +14,7 @@ import (
 )
 
 func TestAgentServeBacksOffOnATemporaryAcceptError(t *testing.T) {
-	l := &fakeListener{accept: func(int64) (net.Conn, error) { return nil, tempError{} }}
+	l := &fakeListener{accept: func(int64) (net.Conn, error) { return nil, transientAcceptError() }}
 
 	a := New(noopHandler, logger.NewNop())
 
@@ -47,7 +48,7 @@ func TestAgentServeKeepsAcceptingBetweenTemporaryErrors(t *testing.T) {
 	l.accept = func(calls int64) (net.Conn, error) {
 		switch calls {
 		case 1, 3:
-			return nil, tempError{}
+			return nil, transientAcceptError()
 
 		case 2, 4:
 			client, server := net.Pipe()
@@ -98,7 +99,7 @@ func TestAgentServeReleasesTheConnectionSlotOnAnAcceptError(t *testing.T) {
 			}
 		}
 
-		return nil, tempError{}
+		return nil, transientAcceptError()
 	}}
 
 	a := New(noopHandler, logger.NewNop(), WithMaxConnections(1))
@@ -139,7 +140,7 @@ func TestAgentServeReturnsAPermanentAcceptError(t *testing.T) {
 }
 
 func TestAgentShutdownInterruptsAnAcceptBackoff(t *testing.T) {
-	l := &fakeListener{accept: func(int64) (net.Conn, error) { return nil, tempError{} }}
+	l := &fakeListener{accept: func(int64) (net.Conn, error) { return nil, transientAcceptError() }}
 
 	a := New(noopHandler, logger.NewNop())
 
@@ -165,13 +166,9 @@ func TestAgentShutdownInterruptsAnAcceptBackoff(t *testing.T) {
 	}
 }
 
-type tempError struct{}
-
-func (tempError) Error() string { return "temporary accept failure" }
-
-func (tempError) Timeout() bool { return false }
-
-func (tempError) Temporary() bool { return true }
+func transientAcceptError() error {
+	return &net.OpError{Op: "accept", Net: "tcp", Err: syscall.EMFILE}
+}
 
 type fakeListener struct {
 	mu     sync.Mutex
