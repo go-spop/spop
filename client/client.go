@@ -40,7 +40,9 @@ func (c *Client) Init() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+	if err := responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error read AgentHello frame: %w", err)
+	}
 
 	switch responseFrame.Type {
 	case frame.TypeAgentHello:
@@ -57,11 +59,11 @@ func (c *Client) Init() error {
 
 func (c *Client) send(f *frame.Frame) error {
 	buf := bytes.NewBuffer(make([]byte, 0))
-	n, err := f.Encode(buf)
-	if err != nil {
+	if _, err := f.Encode(buf); err != nil {
 		return err
 	}
-	n, err = c.conn.Write(buf.Bytes())
+
+	n, err := c.conn.Write(buf.Bytes())
 	if err != nil {
 		return err
 	}
@@ -86,7 +88,14 @@ func (c *Client) Notify() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+	if err := responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error read AgentAck frame: %w", err)
+	}
+
+	if responseFrame.Type != frame.TypeAgentAck {
+		return fmt.Errorf("unexpected frame type: %v", responseFrame.Type)
+	}
+
 	return nil
 }
 
@@ -107,8 +116,13 @@ func (c *Client) Stop() error {
 
 	responseFrame := frame.AcquireFrame()
 	defer frame.ReleaseFrame(responseFrame)
-	responseFrame.Read(c.reader)
+	if err := responseFrame.Read(c.reader); err != nil {
+		return fmt.Errorf("error read AgentDisconnect frame: %w", err)
+	}
+
+	if responseFrame.Type != frame.TypeAgentDisconnect {
+		return fmt.Errorf("unexpected frame type: %v", responseFrame.Type)
+	}
 
 	return nil
-
 }
