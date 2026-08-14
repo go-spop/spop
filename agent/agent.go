@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-spop/spop/engine"
@@ -182,6 +183,44 @@ func nextAcceptBackoff(d time.Duration) time.Duration {
 	return d
 }
 
+// transientAcceptErrors are the accept failures a backoff can outlast: the
+// listener is intact and the resource it wants will be returned by the
+// connections already being served. Everything else ends Serve, because an
+// agent that cannot tell whether an error will clear should not retry it
+// forever.
+//
+// This is the list net.Error.Temporary reports, minus the guesswork: that
+// method is deprecated precisely because "temporary" was never well defined,
+// and it answers false for ENOBUFS and ENOMEM, which are exactly the
+// exhaustion this loop exists to ride out.
+var transientAcceptErrors = []error{
+	syscall.EINTR,
+	syscall.EMFILE,
+	syscall.ENFILE,
+	syscall.ENOBUFS,
+	syscall.ENOMEM,
+}
+
+// isTransientAcceptError reports whether Accept can be expected to succeed
+// again after a pause.
+func isTransientAcceptError(err error) bool {
+	// Deliberately not net.Error, whose interface still carries the deprecated
+	// Temporary method: this asks the one question worth asking, and accepts
+	// any error able to answer it.
+	var timeout interface{ Timeout() bool }
+	if errors.As(err, &timeout) && timeout.Timeout() {
+		return true
+	}
+
+	for _, transient := range transientAcceptErrors {
+		if errors.Is(err, transient) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // pause waits out an accept backoff, reporting false if a drain began first.
 // Sleeping outright would make a shutdown sit through up to a second of a delay
 // that exists only to throttle a listener nobody is accepting from any more.
@@ -253,11 +292,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 				return ErrShutdown
 			}
 
-			//nolint:staticcheck // Temporary is deprecated, but it is still what
-			// classifies EMFILE/ENFILE as retryable, and net/http's own accept
-			// loop reads it for the same reason. Replacing the predicate is
-			// tracked separately as audit finding D-12.
-			if ne, ok := err.(net.Error); ok && ne.Temporary() {
+			if isTransientAcceptError(err) {
 				backoff = nextAcceptBackoff(backoff)
 				agent.logger.Errorf("accept failed, retrying in %v: %v", backoff, err)
 
