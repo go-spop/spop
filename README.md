@@ -5,7 +5,7 @@ Terms from the [HAProxy SPOE specification]:
 ```
 * SPOE : Stream Processing Offload Engine.
 
-    A SPOE is a filter talking to servers managed ba a SPOA to offload the
+    A SPOE is a filter talking to servers managed by a SPOA to offload the
     stream processing. An engine is attached to a proxy. A proxy can have
     several engines. Each engine is linked to an agent and only one.
 
@@ -25,6 +25,20 @@ Terms from the [HAProxy SPOE specification]:
 
 This library implements SPOP to implement a SPOA in go.
 
+## Compatibility
+
+Supports HAProxy 3.2 and newer, which covers every branch carrying the SPOE
+filter rewritten in 3.1: 3.2 LTS, 3.3 and 3.4 LTS.
+
+Those branches negotiate one capability, `pipelining`, which is the one this
+library advertises. HAProxy removed `async` and payload fragmentation in the
+rewrite: it now sets the FIN bit on every frame it sends and closes the
+connection on any frame received without it, so neither is implemented here.
+
+Older branches speak the same protocol version and interoperate on the healthy
+path, but 3.0 LTS and 2.x fragment payloads larger than `max-frame-size` by
+default, which this library does not reassemble.
+
 ## Install
 
 ```
@@ -33,7 +47,7 @@ go get -u github.com/go-spop/spop
 
 ## Example
 
-Section 2.8 of the [HAProxy SPOE specification] describes a simple IP reputation service:
+Section 2.5 of the [HAProxy SPOE specification] describes a simple IP reputation service:
 
 > Here is a simple but complete example that sends client-ip address to a ip
   reputation service. This service can set the variable "ip_score" which is an
@@ -221,4 +235,4 @@ Returns value by name. If key doesn't exist, last returned value will be set to 
 ipValue, ok := message.KV.Get("ip")
 ```
 
-[HAProxy SPOE specification]: https://www.haproxy.org/download/2.8/doc/SPOE.txt
+[HAProxy SPOE specification]: https://www.haproxy.org/download/3.4/doc/SPOE.txt
