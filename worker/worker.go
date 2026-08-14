@@ -476,14 +476,14 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 
 		return true, false, nil
 
-	// Unreachable through run: frame.Read admits HAPROXY-HELLO,
-	// HAPROXY-DISCONNECT and NOTIFY and rejects every other FRAME-TYPE,
-	// agent-side ones included, so a frame reaching dispatch is always one of
-	// the three above. Kept as a refusal rather than a skip because a skip here
-	// would be a lie: it would leave the peer waiting on an answer to a frame
-	// this switch did not handle. Section 3.2.2's "unknown frames may be
-	// silently skipped" is a MAY, and the place to honour it would be Read,
-	// which is where an unrecognised type is actually seen.
+	// frame.Read decodes both directions, so the agent-side types reach here
+	// too: an AGENT-HELLO, AGENT-DISCONNECT or AGENT-ACK arriving at an agent
+	// is a peer sending its own half of the protocol back, which is section
+	// 3.2's roles reversed and nothing this connection can answer. A skip would
+	// be a lie: it would leave the peer waiting on a reply nothing produced.
+	// Section 3.2.2's "unknown frames may be silently skipped" is a MAY and
+	// applies to types Read does not recognise at all, which it rejects before
+	// this switch ever sees them.
 	default:
 		w.disconnect(statusCodeInvalidFrame, "unexpected frame type")
 

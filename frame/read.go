@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/go-spop/spop/action"
 	"github.com/go-spop/spop/varint"
 )
 
@@ -113,8 +114,23 @@ func (f *Frame) ReadLimit(src io.Reader, limit uint32) error {
 			f.EngineID = engineID
 		}
 
+	case TypeAgentHello, TypeAgentDisconnect:
+		// Read decodes both directions: an agent only ever receives the HAProxy
+		// frames above, but the client in this module reads the replies, and a
+		// reader that rejected them would leave its caller no way to tell a
+		// well-formed reply from a broken one.
+		if err = f.KV.Unmarshal(buf); err != nil {
+			return err
+		}
+
 	case TypeNotify:
 		err = f.Messages.Decode(buf)
+		if err != nil {
+			return err
+		}
+
+	case TypeAgentAck:
+		f.Actions, err = action.Unmarshal(buf)
 		if err != nil {
 			return err
 		}
