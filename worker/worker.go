@@ -74,6 +74,11 @@ type Config struct {
 	// never drains: a non-blocking receive on a nil channel always takes the
 	// default branch, so a zero-value Config behaves as it always has.
 	Done <-chan struct{}
+
+	// MaxInFlight bounds how many NOTIFY handlers this connection may run at
+	// once. Zero or less means unlimited, so a zero-value Config behaves as it
+	// always has.
+	MaxInFlight int
 }
 
 // Handle listen connection and process frames
@@ -94,6 +99,13 @@ func Handle(conn *engine.Conn, cfg Config) {
 		ctx:      ctx,
 		cancel:   cancel,
 		done:     cfg.Done,
+	}
+
+	// Nil when unlimited. Built here rather than in the literal because a
+	// non-positive value must leave it nil, not produce a zero-capacity
+	// channel that would block on the first acquire.
+	if cfg.MaxInFlight > 0 {
+		w.slots = make(chan struct{}, cfg.MaxInFlight)
 	}
 
 	if err := w.run(); err != nil {
@@ -133,6 +145,18 @@ type worker struct {
 	// same goroutine once the loop has stopped, so the WaitGroup reuse race
 	// cannot occur; not by careful locking, but by construction.
 	inflight sync.WaitGroup
+
+	// slots bounds the NOTIFY handlers running at once. Nil when unlimited: a
+	// send on a nil channel blocks forever, which is the exact opposite of
+	// disabled, so every use goes through acquireSlot/releaseSlot and their
+	// explicit nil checks.
+	//
+	// Kept alongside inflight rather than replacing it. They are not
+	// redundant: this channel provides a bounded acquire, the WaitGroup
+	// provides wait-for-zero, and both drain and awaitDeliverable need the
+	// latter. Faking wait-for-zero by acquiring all N slots breaks the moment
+	// the limit is disabled.
+	slots chan struct{}
 
 	// deliverable records whether a sibling can still carry an in-flight ACK
 	// once this connection has left its engine. Written by leaveEngine and read
@@ -241,6 +265,48 @@ func (w *worker) shuttingDown() bool {
 	default:
 		return false
 	}
+}
+
+// acquireSlot takes an in-flight slot, blocking while the connection is at its
+// limit -- which is the backpressure: a worker parked here is not reading, so
+// ACKs stop reaching HAProxy and its own "max-waiting-frames" (section 2.2)
+// throttles it. Reports false if a drain began first.
+//
+// This is also why "a saturated connection still processes control frames"
+// only holds up to the point the read loop parks here. The read deadline
+// armed before the read that produced this frame was consumed by that read;
+// nothing rearms it while this call blocks. So while parked in acquireSlot,
+// neither a HAPROXY-DISCONNECT nor the idle timeout can be observed -- only a
+// freed slot or done (drain) wakes this select. The guarantee is: the
+// connection keeps servicing control frames while it is merely at its limit;
+// once a further NOTIFY has been read on top of that, the read loop itself is
+// blocked here until capacity frees up or a drain begins.
+func (w *worker) acquireSlot() bool {
+	if w.slots == nil {
+		return true
+	}
+
+	// A drain that has already begun wins over a slot that happens to be free:
+	// the select below picks at random when both are ready, which would make
+	// "a NOTIFY parked on a slot is never dispatched" a coin flip.
+	if w.shuttingDown() {
+		return false
+	}
+
+	select {
+	case w.slots <- struct{}{}:
+		return true
+	case <-w.done:
+		return false
+	}
+}
+
+func (w *worker) releaseSlot() {
+	if w.slots == nil {
+		return
+	}
+
+	<-w.slots
 }
 
 // drain finishes the work already dispatched, lets its ACKs out, and says
@@ -431,6 +497,24 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 		if !w.ready {
 			w.disconnect(statusCodeInvalidFrame, "unexpected Notify frame before the handshake")
 			return false, false, fmt.Errorf("worker not ready, but got Notify frame")
+		}
+
+		// Backpressure rather than rejection: SPOP has no per-stream refusal.
+		// An ACK carries actions only, and section 3.5's status codes travel in
+		// an AGENT-DISCONNECT, which is connection-level and terminal, so there
+		// is no way to tell HAProxy "this one NOTIFY is refused". The choice is
+		// between slowing down and hanging up, and hanging up discards
+		// in-flight ACKs for what is usually a transient spike.
+		//
+		// The gate is here, after the frame is decoded, and not on the read: a
+		// saturated connection must still process a HAPROXY-DISCONNECT and
+		// still take part in its own shutdown. Gating the read starves the
+		// control path exactly when the connection is in most trouble.
+		if !w.acquireSlot() {
+			// The drain began while this NOTIFY waited for capacity. Not
+			// dispatching it is the same policy as for one arriving after the
+			// drain starts.
+			return false, true, w.drain()
 		}
 
 		// The goroutine owns the frame from here: it reads the payload after

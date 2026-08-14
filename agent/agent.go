@@ -25,6 +25,13 @@ const (
 	DefaultWriteTimeout     = 10 * time.Second
 )
 
+// DefaultMaxInFlight is the agent-side counterpart of HAProxy's
+// "max-waiting-frames" (SPOE 2.0 section 2.2), which defaults to 20. Matching
+// it means a conformant peer never reaches this limit; a peer that raised its
+// own, or ignores it, is throttled rather than allowed to spawn a goroutine
+// per pipelined NOTIFY.
+const DefaultMaxInFlight = 20
+
 // Option configures an Agent. Options are variadic so adding one never breaks
 // an existing New call.
 type Option func(*Agent)
@@ -46,6 +53,52 @@ func WithWriteTimeout(d time.Duration) Option {
 	return func(a *Agent) { a.timeouts.Write = d }
 }
 
+// WithMaxInFlight bounds how many NOTIFY handlers one connection may run at
+// once. Set it at or below HAProxy's own "max-waiting-frames". Zero or less
+// disables the limit.
+//
+// At the limit the connection stops dispatching, which stops it reading, which
+// is the backpressure: SPOP has no way to refuse a single NOTIFY, so slowing
+// down is the only alternative to hanging up. A NOTIFY parked behind the gate
+// keeps burning that stream's share of HAProxy's "timeout processing", so
+// setting this well below "max-waiting-frames" is choosing SPOE's on-error
+// handling over letting goroutines pile up, and should be a deliberate choice
+// rather than a surprise.
+//
+// A connection parked here stops reading its socket entirely, which has two
+// consequences beyond throughput. The peer closing its side is never noticed:
+// there is no read in flight to hit EOF, so the connection stays in the
+// agent's roster, keeps its WaitGroup count, and -- with WithMaxConnections --
+// keeps its connection slot, all until Shutdown tears it down. And
+// WithIdleTimeout does not help: the idle deadline only fires against a read
+// that is actually armed, and none is armed while a NOTIFY sits here, so the
+// timeout an operator would naturally reach for to bound a stuck connection is
+// inert in exactly this state.
+func WithMaxInFlight(n int) Option {
+	return func(a *Agent) { a.maxInFlight = n }
+}
+
+// WithMaxConnections bounds how many connections the agent serves at once. At
+// the limit it stops accepting until a slot frees. Zero or less, the default,
+// disables the limit: legitimate pool sizes vary per deployment, and a default
+// guessed low presents as HAProxy being unable to open the pool it is
+// configured for.
+//
+// The limit is shared across every Serve call on this Agent, not per listener.
+// Each Serve loop reserves its slot before Accept, so with N as the limit and
+// M listeners (IPv4 + IPv6, or TCP + a unix socket, are both normal SPOA
+// setups), whichever loops win a permit hold it while parked in Accept, and an
+// idle listener that never won one never accepts a connection, even with the
+// agent otherwise idle: the effective ceiling is N minus however many
+// listeners are sitting on a permit they are not using, and once M exceeds N
+// some listeners get none at all. Acquiring after Accept instead would avoid
+// that, but at the cost of an accept and a close for every connection this
+// agent refuses, which is the trade the design explicitly rejected. An agent
+// serving M listeners should set this above M.
+func WithMaxConnections(n int) Option {
+	return func(a *Agent) { a.maxConnections = n }
+}
+
 func New(handler func(context.Context, *request.Request), logger logger.Logger, opts ...Option) *Agent {
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -57,14 +110,22 @@ func New(handler func(context.Context, *request.Request), logger logger.Logger, 
 			Handshake: DefaultHandshakeTimeout,
 			Write:     DefaultWriteTimeout,
 		},
-		ctx:    ctx,
-		cancel: cancel,
-		done:   make(chan struct{}),
-		conns:  make(map[*engine.Conn]struct{}),
+		maxInFlight: DefaultMaxInFlight,
+		ctx:         ctx,
+		cancel:      cancel,
+		done:        make(chan struct{}),
+		conns:       make(map[*engine.Conn]struct{}),
 	}
 
 	for _, opt := range opts {
 		opt(agent)
+	}
+
+	// Built after the options, which are what decide the capacity. A
+	// non-positive value must leave this nil rather than produce a
+	// zero-capacity channel that would block on the first acquire.
+	if agent.maxConnections > 0 {
+		agent.connSlots = make(chan struct{}, agent.maxConnections)
 	}
 
 	return agent
@@ -75,6 +136,14 @@ type Agent struct {
 	logger   logger.Logger
 	registry *engine.Registry
 	timeouts worker.Timeouts
+
+	maxInFlight    int
+	maxConnections int
+
+	// connSlots bounds the connections served at once. Nil when unlimited: a
+	// send on a nil channel blocks forever, which is the exact opposite of
+	// disabled, so every use goes through acquireConn/releaseConn.
+	connSlots chan struct{}
 
 	// ctx parents every worker's connection context. Cancelling it reaches
 	// every handler still running, which is what lets the force close at grace
@@ -130,6 +199,39 @@ func (agent *Agent) pause(d time.Duration) bool {
 	}
 }
 
+// acquireConn takes a connection slot, blocking while the agent is at its
+// limit. Reports false if a drain began first: a Serve parked here is not in
+// Accept, so closing the listener cannot wake it and only the done channel
+// can.
+func (agent *Agent) acquireConn() bool {
+	if agent.connSlots == nil {
+		return true
+	}
+
+	// Not load-bearing the way worker.acquireSlot's equivalent check is: every
+	// path below that follows a lost race already handles a drain correctly.
+	// This is a fast path for determinism, matching the other gate, so the two
+	// semaphores do not read as having diverged by oversight.
+	if agent.isDraining() {
+		return false
+	}
+
+	select {
+	case agent.connSlots <- struct{}{}:
+		return true
+	case <-agent.done:
+		return false
+	}
+}
+
+func (agent *Agent) releaseConn() {
+	if agent.connSlots == nil {
+		return
+	}
+
+	<-agent.connSlots
+}
+
 func (agent *Agent) Serve(listener net.Listener) error {
 	if !agent.addListener(listener) {
 		return ErrShutdown
@@ -138,8 +240,17 @@ func (agent *Agent) Serve(listener net.Listener) error {
 	var backoff time.Duration
 
 	for {
+		// Before the accept, so a connection this agent will not serve costs it
+		// nothing: no accept, no engine.Conn, no worker. Every path below that
+		// does not reach the worker goroutine has to release this.
+		if !agent.acquireConn() {
+			return ErrShutdown
+		}
+
 		conn, err := listener.Accept()
 		if err != nil {
+			agent.releaseConn()
+
 			if agent.isDraining() {
 				return ErrShutdown
 			}
@@ -170,6 +281,8 @@ func (agent *Agent) Serve(listener net.Listener) error {
 		c.SetWriteTimeout(agent.timeouts.Write)
 
 		if !agent.track(c) {
+			agent.releaseConn()
+
 			// The drain began between Accept and here. This connection has not
 			// shaken hands, so there is nothing to say goodbye to.
 			if err := c.Close(); err != nil {
@@ -180,6 +293,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 		}
 
 		go func() {
+			defer agent.releaseConn()
 			defer agent.forget(c)
 
 			worker.Handle(c, worker.Config{
@@ -187,6 +301,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 				Handler:     agent.handler,
 				Logger:      agent.logger,
 				Timeouts:    agent.timeouts,
+				MaxInFlight: agent.maxInFlight,
 				Done:        agent.done,
 				BaseContext: agent.ctx,
 			})
