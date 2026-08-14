@@ -22,41 +22,48 @@ Variable-length integer (varint) are encoded using Peers encoding:
 // is never too small.
 const MaxLen = 10
 
+// PutUvarint encodes n into buf and returns the number of bytes written, or -1
+// if buf is too small to hold the whole encoding.
+//
+// The value is built in a scratch array and copied over only once its full
+// width is known, so a buffer that turns out to be too small is left exactly as
+// it was. Writing as it went would leave the destination holding a prefix of an
+// encoding that was never completed, indistinguishable from one that was.
+//
+// The scratch array cannot overflow: MaxLen is the widest encoding a uint64 has,
+// which varint's own tests pin from both sides.
 func PutUvarint(buf []byte, n uint64) int {
+	var scratch [MaxLen]byte
+
 	var p int
 
-	if len(buf) == 0 {
-		return -1
-	}
-
 	if n < 240 {
-		buf[p] = byte(n)
-		return 1
-	}
+		scratch[p] = byte(n)
+		p++
+	} else {
+		scratch[p] = byte(n) | 0xF0
+		p++
 
-	buf[p] = byte(n) | 0xF0
+		n = (n - 240) >> 4
 
-	p++
+		for n >= 128 {
+			scratch[p] = byte(n) | 128
+			n = (n - 128) >> 7
 
-	n = (n - 240) >> 4
-
-	for n >= 128 {
-		if p >= len(buf) {
-			return -1
+			p++
 		}
 
-		buf[p] = byte(n) | 128
-		n = (n - 128) >> 7
-
+		scratch[p] = byte(n)
 		p++
 	}
-	if p >= len(buf) {
+
+	if len(buf) < p {
 		return -1
 	}
 
-	buf[p] = byte(n)
+	copy(buf, scratch[:p])
 
-	return p + 1
+	return p
 }
 
 func Uvarint(buf []byte) (uint64, int) {
