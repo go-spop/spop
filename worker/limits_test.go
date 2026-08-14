@@ -152,7 +152,6 @@ func startWorkerLimited(t *testing.T, maxInFlight int, handler func(context.Cont
 	done := make(chan struct{})
 
 	go Handle(conn, Config{
-		Registry:    engine.NewRegistry(),
 		Handler:     handler,
 		Logger:      logger.NewNop(),
 		Done:        done,
