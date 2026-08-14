@@ -39,6 +39,13 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 
 	err := w.writeFrame(ackFrame)
 	if err != nil {
+		// Not a failure: the connection said goodbye while this handler was
+		// working, and holding the ACK back is what that goodbye promised. The
+		// teardown that sent it is already under way.
+		if errors.Is(err, errAfterDisconnect) {
+			return
+		}
+
 		w.logger.Errorf("ack frame write failed: %v", err)
 
 		// However it failed, this ACK is not arriving, and section 3.2.9 has
@@ -74,7 +81,20 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	}
 }
 
+// writeFrame writes an ACK, unless this connection has already said goodbye.
+//
+// The lock spans the check and the write so the two cannot interleave with
+// sendAgentDisconnect, which takes the same lock: section 3.2.9 makes the
+// AGENT-DISCONNECT the last frame on the connection, and an ACK that passed an
+// unlocked check could still land behind it.
 func (w *worker) writeFrame(f *frame.Frame) error {
+	w.sendMu.Lock()
+	defer w.sendMu.Unlock()
+
+	if w.goodbyeSent {
+		return errAfterDisconnect
+	}
+
 	buf := bytes.NewBuffer(make([]byte, 0))
 	n, err := f.Encode(buf)
 	if err != nil {

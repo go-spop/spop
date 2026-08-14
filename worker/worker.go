@@ -52,6 +52,11 @@ const (
 // under the status codes that describe them.
 var errEncodeFrame = errors.New("cannot marshal frame")
 
+// errAfterDisconnect reports a frame abandoned because this connection had
+// already said goodbye. Not a failure to report to the peer: the peer has been
+// told the connection is over, and this is the agent honouring that.
+var errAfterDisconnect = errors.New("frame not sent: the AGENT-DISCONNECT has already gone out")
+
 // Timeouts bound how long a connection may block. Zero disables a timeout,
 // matching net.Conn deadline semantics.
 //
@@ -137,6 +142,16 @@ type worker struct {
 	// The peer is owed at most one AGENT-DISCONNECT however many goroutines
 	// reach the failure. The connection's own close is idempotent.
 	disconnectOnce sync.Once
+
+	// sendMu orders an ACK against the AGENT-DISCONNECT, and goodbyeSent
+	// records that the latter has gone out. Section 3.2.9 makes the
+	// AGENT-DISCONNECT the last frame a connection carries, and the two are
+	// written from different goroutines: the read loop says goodbye while a
+	// NOTIFY handler may be finishing. Taking this lock for the whole of both
+	// writes is what stops a handler that passed the check from landing its ACK
+	// behind a goodbye sent in between.
+	sendMu      sync.Mutex
+	goodbyeSent bool
 
 	// inflight counts the NOTIFY handlers dispatched from this connection. Add
 	// is only ever called from the read-loop goroutine and Wait runs in that
@@ -461,9 +476,17 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 
 		return true, false, nil
 
+	// Unreachable through run: frame.Read admits HAPROXY-HELLO,
+	// HAPROXY-DISCONNECT and NOTIFY and rejects every other FRAME-TYPE,
+	// agent-side ones included, so a frame reaching dispatch is always one of
+	// the three above. Kept as a refusal rather than a skip because a skip here
+	// would be a lie: it would leave the peer waiting on an answer to a frame
+	// this switch did not handle. Section 3.2.2's "unknown frames may be
+	// silently skipped" is a MAY, and the place to honour it would be Read,
+	// which is where an unrecognised type is actually seen.
 	default:
-		w.logger.Errorf("unexpected frame type: %v", f.Type)
+		w.disconnect(statusCodeInvalidFrame, "unexpected frame type")
 
-		return false, false, nil
+		return false, false, fmt.Errorf("unexpected frame type: %v", f.Type)
 	}
 }
