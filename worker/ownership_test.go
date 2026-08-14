@@ -61,9 +61,18 @@ func TestWorkerDispatchReportsFrameOwnership(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:  "an unknown frame type is skipped and keeps nothing",
+			name:  "a frame type Read never admits is refused and keeps nothing",
 			ready: true,
 			build: func(_ *testing.T, f *frame.Frame) { f.Type = frame.Type(0x7f) },
+
+			wantErr: true,
+		},
+		{
+			name:  "an agent-side frame type is refused and keeps nothing",
+			ready: true,
+			build: func(_ *testing.T, f *frame.Frame) { f.Type = frame.TypeAgentAck },
+
+			wantErr: true,
 		},
 	}
 
