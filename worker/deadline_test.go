@@ -28,7 +28,6 @@ func startWorkerTimeouts(t *testing.T, timeouts Timeouts) net.Conn {
 	client, server := net.Pipe()
 
 	go Handle(engine.NewConn(server), Config{
-		Registry: engine.NewRegistry(),
 		Handler:  func(context.Context, *request.Request) {},
 		Logger:   logger.NewNop(),
 		Timeouts: timeouts,

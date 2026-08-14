@@ -27,12 +27,11 @@ func newTestWorker(t *testing.T) *worker {
 	t.Cleanup(cancel)
 
 	return &worker{
-		conn:     engine.NewConn(server),
-		registry: engine.NewRegistry(),
-		handler:  func(context.Context, *request.Request) {},
-		logger:   logger.NewNop(),
-		ctx:      ctx,
-		cancel:   cancel,
+		conn:    engine.NewConn(server),
+		handler: func(context.Context, *request.Request) {},
+		logger:  logger.NewNop(),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }
 

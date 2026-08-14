@@ -67,17 +67,9 @@ func (w *worker) writeFrame(f *frame.Frame) error {
 		return fmt.Errorf("%w: %d exceeds the %d byte maximum", frame.ErrFrameTooBig, length, w.frameLimit())
 	}
 
-	// Section 3.2.1: with async, any connection of the engine may carry the
-	// ACK. Prefer the one its NOTIFY arrived on; a sibling covers the case
-	// where HAProxy has since retired that connection.
-	if w.engine != nil {
-		return w.engine.Write(w.conn, buf.Bytes())
-	}
-
-	// Before the handshake there is no engine, and no frame written here would
-	// be an ACK. This is also the live path on any connection where async was
-	// not negotiated (no engine-id, or the peer's capabilities did not name
-	// async): w.engine stays nil for the life of the connection, so its ACK
-	// always goes back on its own connection.
+	// Every frame goes out on the connection it belongs to. Section 3.2.1's
+	// "async" capability would have allowed an ACK to leave on a sibling of the
+	// same engine; this agent does not advertise it, so an ACK whose own
+	// connection has gone is dropped rather than rerouted.
 	return w.conn.WriteFrame(buf.Bytes())
 }

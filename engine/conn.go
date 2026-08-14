@@ -1,6 +1,6 @@
-// Package engine groups the TCP connections of one SPOE engine so that an ACK
-// may be written on any of them, which is what SPOE 2.0 section 3.2.1's "async"
-// capability permits.
+// Package engine holds one connection to a SPOE engine, with the write
+// serialisation, close-once and deadline handling every frame written to it
+// depends on.
 package engine
 
 import (
@@ -22,7 +22,6 @@ type Conn struct {
 
 	mu           sync.RWMutex
 	closed       bool
-	maxFrameSize uint32
 	writeTimeout time.Duration
 }
 
@@ -106,25 +105,9 @@ func (c *Conn) IsClosed() bool {
 	return c.closed
 }
 
-// SetMaxFrameSize records what this connection negotiated. Called once, at the
-// end of the HELLO handshake, before the connection joins an engine.
-func (c *Conn) SetMaxFrameSize(size uint32) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	c.maxFrameSize = size
-}
-
-func (c *Conn) MaxFrameSize() uint32 {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	return c.maxFrameSize
-}
-
 // SetWriteTimeout bounds how long a payload may take to write. Zero disables
 // it, matching net.Conn deadline semantics. Called once at the construction
-// site before the connection is used, as SetMaxFrameSize is.
+// site, before the connection is used.
 func (c *Conn) SetWriteTimeout(d time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

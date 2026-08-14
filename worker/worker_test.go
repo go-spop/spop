@@ -39,9 +39,8 @@ func TestWorker(t *testing.T) {
 
 	go func() {
 		Handle(engine.NewConn(server), Config{
-			Registry: engine.NewRegistry(),
-			Handler:  m.Handle,
-			Logger:   logger.NewNop(),
+			Handler: m.Handle,
+			Logger:  logger.NewNop(),
 		})
 		m.Finish()
 	}()
@@ -80,16 +79,14 @@ func TestWorkerConcurrent(t *testing.T) {
 
 	go func() {
 		Handle(engine.NewConn(server), Config{
-			Registry: engine.NewRegistry(),
-			Handler:  m.Handle,
-			Logger:   logger.NewNop(),
+			Handler: m.Handle,
+			Logger:  logger.NewNop(),
 		})
 	}()
 	go func() {
 		Handle(engine.NewConn(server2), Config{
-			Registry: engine.NewRegistry(),
-			Handler:  m.Handle,
-			Logger:   logger.NewNop(),
+			Handler: m.Handle,
+			Logger:  logger.NewNop(),
 		})
 	}()
 	duration := time.Second
@@ -131,9 +128,8 @@ func BenchmarkWorker(b *testing.B) {
 
 	go func() {
 		Handle(engine.NewConn(server), Config{
-			Registry: engine.NewRegistry(),
-			Handler:  m.Handle,
-			Logger:   logger.NewNop(),
+			Handler: m.Handle,
+			Logger:  logger.NewNop(),
 		})
 		m.Finish()
 	}()

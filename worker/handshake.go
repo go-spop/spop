@@ -37,7 +37,6 @@ func (e *disconnectError) Error() string {
 // been checked against section 3.2.4.
 type negotiated struct {
 	maxFrameSize uint32
-	capabilities []string
 }
 
 // negotiate validates a HAPROXY-HELLO and works out the AGENT-HELLO's reply.
@@ -80,8 +79,11 @@ func negotiate(f *frame.Frame) (negotiated, *disconnectError) {
 		}
 	}
 
-	peerCapabilities, ok := stringItem(f, "capabilities")
-	if !ok {
+	// Section 3.2.4 makes "capabilities" mandatory, so a HELLO without a usable
+	// one is refused. The list itself is not read: the agent's own capabilities
+	// are a fixed "pipelining", which section 3.2.1 makes symmetrical, so a peer
+	// that does not name it simply will not use it.
+	if _, ok := stringItem(f, "capabilities"); !ok {
 		return out, &disconnectError{statusCodeNoCapabilities, "no usable capabilities in the HAProxyHello"}
 	}
 
@@ -91,8 +93,6 @@ func negotiate(f *frame.Frame) (negotiated, *disconnectError) {
 	if out.maxFrameSize > frame.MaxFrameSize {
 		out.maxFrameSize = frame.MaxFrameSize
 	}
-
-	out.capabilities = splitList(peerCapabilities)
 
 	return out, nil
 }

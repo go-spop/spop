@@ -103,9 +103,8 @@ func New(handler func(context.Context, *request.Request), logger logger.Logger, 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	agent := &Agent{
-		handler:  handler,
-		logger:   logger,
-		registry: engine.NewRegistry(),
+		handler: handler,
+		logger:  logger,
 		timeouts: worker.Timeouts{
 			Handshake: DefaultHandshakeTimeout,
 			Write:     DefaultWriteTimeout,
@@ -134,7 +133,6 @@ func New(handler func(context.Context, *request.Request), logger logger.Logger, 
 type Agent struct {
 	handler  func(context.Context, *request.Request)
 	logger   logger.Logger
-	registry *engine.Registry
 	timeouts worker.Timeouts
 
 	maxInFlight    int
@@ -297,7 +295,6 @@ func (agent *Agent) Serve(listener net.Listener) error {
 			defer agent.forget(c)
 
 			worker.Handle(c, worker.Config{
-				Registry:    agent.registry,
 				Handler:     agent.handler,
 				Logger:      agent.logger,
 				Timeouts:    agent.timeouts,

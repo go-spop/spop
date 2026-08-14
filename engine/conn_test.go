@@ -152,22 +152,6 @@ func TestConn_WriteFrame_failsWhenClosed(t *testing.T) {
 	}
 }
 
-func TestConn_MaxFrameSize_roundTrips(t *testing.T) {
-	_, server := net.Pipe()
-	defer server.Close()
-
-	c := NewConn(server)
-	if got := c.MaxFrameSize(); got != 0 {
-		t.Fatalf("expected 0 before negotiation, got %d", got)
-	}
-
-	c.SetMaxFrameSize(16384)
-
-	if got := c.MaxFrameSize(); got != 16384 {
-		t.Fatalf("expected 16384, got %d", got)
-	}
-}
-
 // A peer that never reads must not pin a writer forever. net.Pipe is
 // unbuffered, so a Write with no reader blocks until the deadline fires; an
 // exact model of a wedged peer.

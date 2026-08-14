@@ -24,9 +24,13 @@ func (w *worker) sendAgentHello(agreed negotiated) error {
 	agentHello.FrameID = 0
 	agentHello.StreamID = 0
 
-	agentHello.KV.Add("version", version)
-	agentHello.KV.Add("max-frame-size", agreed.maxFrameSize)
-	agentHello.KV.Add("capabilities", w.advertisedCapabilities())
+	agentHello.KV.Add(helloKeyVersion, version)
+	agentHello.KV.Add(helloKeyMaxFrameSize, agreed.maxFrameSize)
+	// Section 3.2.1's capabilities are negotiated, and an agent may announce
+	// fewer than the peer offers. This agent takes part in pipelining and
+	// nothing else: an ACK always returns on the connection its NOTIFY arrived
+	// on, and no payload is ever fragmented.
+	agentHello.KV.Add(helloKeyCapabilities, capabilityPipelining)
 
 	buf := bytes.NewBuffer(make([]byte, 0))
 
@@ -35,7 +39,5 @@ func (w *worker) sendAgentHello(agreed negotiated) error {
 		return fmt.Errorf("marshaling error: %v", err)
 	}
 
-	// This frame describes this connection's own state, so it is never routed
-	// to a sibling.
 	return w.conn.WriteFrame(buf.Bytes())
 }

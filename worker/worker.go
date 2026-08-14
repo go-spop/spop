@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"slices"
 	"sync"
 	"time"
 
@@ -18,13 +17,18 @@ import (
 )
 
 const (
-	// Section 3.2.1's capability tokens.
+	// The one capability of section 3.2.1 this agent takes part in.
 	capabilityPipelining = "pipelining"
-	capabilityAsync      = "async"
 
 	// frameLengthPrefix is the 4-byte FRAME-LENGTH field, which the length it
 	// declares does not itself count.
 	frameLengthPrefix = 4
+)
+
+const (
+	helloKeyCapabilities = "capabilities"
+	helloKeyMaxFrameSize = "max-frame-size"
+	helloKeyVersion      = "version"
 )
 
 // Status codes from SPOE 2.0 section 3.5.
@@ -61,7 +65,6 @@ type Timeouts struct {
 
 // Config is everything a worker needs beyond its connection.
 type Config struct {
-	Registry *engine.Registry
 	Handler  func(context.Context, *request.Request)
 	Logger   logger.Logger
 	Timeouts Timeouts
@@ -92,7 +95,6 @@ func Handle(conn *engine.Conn, cfg Config) {
 
 	w := &worker{
 		conn:     conn,
-		registry: cfg.Registry,
 		handler:  cfg.Handler,
 		logger:   cfg.Logger,
 		timeouts: cfg.Timeouts,
@@ -115,26 +117,14 @@ func Handle(conn *engine.Conn, cfg Config) {
 
 type worker struct {
 	conn     *engine.Conn
-	registry *engine.Registry
-	engine   *engine.Engine
 	ready    bool
 	engineID string
 	handler  func(context.Context, *request.Request)
 
-	// Negotiated during the HELLO handshake. maxFrameSize is the value the
-	// AGENT-HELLO announced and is recorded on the connection, which is what
-	// bounds writes to it. Written before the first NOTIFY goroutine starts.
-	peerCapabilities []string
-	maxFrameSize     uint32
-
-	// async records whether this connection's ACKs may be rerouted to a
-	// sibling. Section 3.2.1 makes async "a symmectical capability [ ... ] To
-	// be used, it must be supported by HAproxy and agents" (the same rule it
-	// states for pipelining). engine-id alone only says the peer's
-	// connections CAN be grouped; HAProxy sends it unconditionally, whether
-	// or not async is configured; so async additionally requires the peer's
-	// capabilities list to name it.
-	async bool
+	// maxFrameSize is the value the AGENT-HELLO announced, negotiated during
+	// the HELLO handshake and written before the first NOTIFY goroutine starts.
+	// It bounds frames in both directions.
+	maxFrameSize uint32
 
 	// The peer is owed at most one AGENT-DISCONNECT however many goroutines
 	// reach the failure. The connection's own close is idempotent.
@@ -153,15 +143,9 @@ type worker struct {
 	//
 	// Kept alongside inflight rather than replacing it. They are not
 	// redundant: this channel provides a bounded acquire, the WaitGroup
-	// provides wait-for-zero, and both drain and awaitDeliverable need the
-	// latter. Faking wait-for-zero by acquiring all N slots breaks the moment
-	// the limit is disabled.
+	// provides wait-for-zero, and drain needs the latter. Faking wait-for-zero
+	// by acquiring all N slots breaks the moment the limit is disabled.
 	slots chan struct{}
-
-	// deliverable records whether a sibling can still carry an in-flight ACK
-	// once this connection has left its engine. Written by leaveEngine and read
-	// by awaitDeliverable, both as run unwinds on the read-loop goroutine.
-	deliverable bool
 
 	logger   logger.Logger
 	timeouts Timeouts
@@ -178,43 +162,6 @@ func (w *worker) close() {
 	if err := w.conn.Close(); err != nil {
 		w.logger.Errorf("close connection: %v", err)
 	}
-}
-
-// leaveEngine takes this connection out of its engine so no further ACK is
-// routed to it, and records whether anything is left that could carry one.
-// Safe before the handshake, when there is no engine yet.
-func (w *worker) leaveEngine() {
-	if w.engine == nil {
-		// No engine means no sibling: async was not negotiated, or the
-		// handshake never completed. This connection was the only route.
-		w.deliverable = false
-		return
-	}
-
-	// Leave reports the departure that emptied the engine. Until that one, a
-	// sibling remains for Engine.Write to route an ACK to.
-	w.deliverable = !w.registry.Leave(w.engine, w.conn)
-}
-
-// awaitDeliverable waits for in-flight handlers when a sibling can still carry
-// their ACKs; section 3.2.1's async failover is exactly the case where a
-// handler outliving its own connection is still useful. When nothing can carry
-// them it returns at once, and the cancel that follows stops handlers whose
-// results nobody can receive.
-//
-// During a shutdown this wait is bounded: Agent.Shutdown's grace-period
-// expiry cancels the base context, which cancels the handlers and lets the
-// WaitGroup reach zero. Outside a shutdown there is no bound; a connection
-// that dies while an async sibling remains, running a handler that never
-// returns, blocks here indefinitely, because this worker's own cancel (run's
-// deferred call) only happens after this wait returns. That is the deliberate
-// cost of not discarding a deliverable ACK.
-func (w *worker) awaitDeliverable() {
-	if !w.deliverable {
-		return
-	}
-
-	w.inflight.Wait()
 }
 
 // disconnect reports an agent-side error to the peer before the connection is
@@ -357,20 +304,9 @@ func (w *worker) armReadDeadline() error {
 	return nil
 }
 
-// advertisedCapabilities is what this connection's AGENT-HELLO claims.
-func (w *worker) advertisedCapabilities() string {
-	if !w.async {
-		return capabilityPipelining
-	}
-
-	return capabilityPipelining + "," + capabilityAsync
-}
-
 func (w *worker) run() error {
 	defer w.cancel()
 	defer w.close()
-	defer w.awaitDeliverable()
-	defer w.leaveEngine()
 
 	buf := bufio.NewReader(w.conn.Reader())
 
@@ -451,17 +387,12 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 			return false, false, fmt.Errorf("handshake failed: %w", disconnectErr)
 		}
 
-		w.peerCapabilities = agreed.capabilities
 		w.maxFrameSize = agreed.maxFrameSize
-		w.conn.SetMaxFrameSize(agreed.maxFrameSize)
-		w.engineID = f.EngineID
 
-		// Section 3.2.1 defines async as symmetrical, like pipelining: "To
-		// be used, it must be supported by HAproxy and agents." engine-id
-		// says the peer's connections CAN be grouped; the capability list
-		// says it will accept an ACK on a sibling. HAProxy sends engine-id
-		// unconditionally, so it alone proves nothing.
-		w.async = w.engineID != "" && slices.Contains(w.peerCapabilities, capabilityAsync)
+		// Kept for the Request the handler sees. Section 3.2.1 names engine-id
+		// as the value an agent could group connections by; this agent does not
+		// group them, so it is reported and nothing more.
+		w.engineID = f.EngineID
 
 		if err := w.sendAgentHello(agreed); err != nil {
 			// The AGENT-HELLO could not be written, so an AGENT-DISCONNECT
@@ -475,9 +406,6 @@ func (w *worker) dispatch(f *frame.Frame) (transferred bool, done bool, err erro
 		}
 
 		w.ready = true
-		if w.async {
-			w.engine = w.registry.Join(w.engineID, w.conn)
-		}
 
 		return false, false, nil
 

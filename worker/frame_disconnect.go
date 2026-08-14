@@ -26,7 +26,5 @@ func (w *worker) sendAgentDisconnect(statusCode uint32, message string) error {
 		return err
 	}
 
-	// This frame describes this connection's own state, so it is never routed
-	// to a sibling.
 	return w.conn.WriteFrame(buf.Bytes())
 }

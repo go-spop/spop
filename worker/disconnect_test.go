@@ -103,9 +103,8 @@ func startWorkerWith(t *testing.T, handler func(context.Context, *request.Reques
 	client, server := net.Pipe()
 
 	go Handle(engine.NewConn(server), Config{
-		Registry: engine.NewRegistry(),
-		Handler:  handler,
-		Logger:   logger.NewNop(),
+		Handler: handler,
+		Logger:  logger.NewNop(),
 	})
 
 	if err := client.SetDeadline(time.Now().Add(5 * time.Second)); err != nil {
