@@ -10,10 +10,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 const (
@@ -72,7 +72,7 @@ type Timeouts struct {
 	// Idle closes a connection that has carried no frame for this long.
 	Idle time.Duration
 
-	// Write bounds a single payload write. Applied by engine.Conn.
+	// Write bounds a single payload write. Applied by transport.Conn.
 	Write time.Duration
 }
 
@@ -98,7 +98,7 @@ type Config struct {
 }
 
 // Handle listen connection and process frames
-func Handle(conn *engine.Conn, cfg Config) {
+func Handle(conn *transport.Conn, cfg Config) {
 	base := cfg.BaseContext
 	if base == nil {
 		base = context.Background()
@@ -129,7 +129,7 @@ func Handle(conn *engine.Conn, cfg Config) {
 }
 
 type worker struct {
-	conn     *engine.Conn
+	conn     *transport.Conn
 	ready    bool
 	engineID string
 	handler  func(context.Context, *request.Request)

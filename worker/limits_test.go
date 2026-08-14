@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerMaxInFlightBlocksTheNextNotify(t *testing.T) {
@@ -144,11 +144,11 @@ func TestWorkerDrainAbandonsANotifyWaitingForASlot(t *testing.T) {
 	}
 }
 
-func startWorkerLimited(t *testing.T, maxInFlight int, handler func(context.Context, *request.Request)) (net.Conn, *engine.Conn, chan struct{}) {
+func startWorkerLimited(t *testing.T, maxInFlight int, handler func(context.Context, *request.Request)) (net.Conn, *transport.Conn, chan struct{}) {
 	t.Helper()
 
 	client, server := net.Pipe()
-	conn := engine.NewConn(server)
+	conn := transport.NewConn(server)
 	done := make(chan struct{})
 
 	go Handle(conn, Config{

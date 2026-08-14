@@ -10,10 +10,10 @@ import (
 	"time"
 
 	"github.com/go-spop/spop/action"
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerClosesWhenAnAckCannotBeEncoded(t *testing.T) {
@@ -44,7 +44,7 @@ func TestWorkerClosesWhenAnAckWriteFails(t *testing.T) {
 	client, server := net.Pipe()
 	t.Cleanup(func() { client.Close() })
 
-	conn := engine.NewConn(server)
+	conn := transport.NewConn(server)
 	conn.SetWriteTimeout(50 * time.Millisecond)
 
 	go Handle(conn, Config{
@@ -76,7 +76,7 @@ func TestWorkerClosesWhenAnAckWriteFails(t *testing.T) {
 	waitUntilClosed(t, conn)
 }
 
-func waitUntilClosed(t *testing.T, conn *engine.Conn) {
+func waitUntilClosed(t *testing.T, conn *transport.Conn) {
 	t.Helper()
 
 	deadline := time.Now().Add(2 * time.Second)

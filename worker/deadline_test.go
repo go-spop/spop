@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerHandshakeTimeoutDisconnects(t *testing.T) {
@@ -92,7 +92,7 @@ func startWorkerTimeouts(t *testing.T, timeouts Timeouts) net.Conn {
 
 	client, server := net.Pipe()
 
-	go Handle(engine.NewConn(server), Config{
+	go Handle(transport.NewConn(server), Config{
 		Handler:  func(context.Context, *request.Request) {},
 		Logger:   logger.NewNop(),
 		Timeouts: timeouts,

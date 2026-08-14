@@ -10,11 +10,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/payload/kv"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 	"github.com/go-spop/spop/varint"
 )
 
@@ -170,7 +170,7 @@ func startWorkerWith(t *testing.T, handler func(context.Context, *request.Reques
 
 	client, server := net.Pipe()
 
-	go Handle(engine.NewConn(server), Config{
+	go Handle(transport.NewConn(server), Config{
 		Handler: handler,
 		Logger:  logger.NewNop(),
 	})

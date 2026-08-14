@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/go-spop/spop/action"
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerDrainFinishesInFlightWorkThenSaysGoodbye(t *testing.T) {
@@ -109,13 +109,13 @@ func TestWorkerDrainDoesNotDispatchNewNotifies(t *testing.T) {
 
 const wantStatusCodeNormal = uint32(0)
 
-func startWorkerDraining(t *testing.T, handler func(context.Context, *request.Request)) (net.Conn, *engine.Conn, chan struct{}) {
+func startWorkerDraining(t *testing.T, handler func(context.Context, *request.Request)) (net.Conn, *transport.Conn, chan struct{}) {
 	t.Helper()
 
 	return startWorkerLimited(t, 0, handler)
 }
 
-func beginDrain(t *testing.T, conn *engine.Conn, done chan struct{}) {
+func beginDrain(t *testing.T, conn *transport.Conn, done chan struct{}) {
 	t.Helper()
 
 	close(done)

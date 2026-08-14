@@ -10,10 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestAgentShutdownDrainsAnInFlightHandler(t *testing.T) {
@@ -152,7 +152,7 @@ func TestAgentTrackRefusesOnceDraining(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
-	if a.track(engine.NewConn(server)) {
+	if a.track(transport.NewConn(server)) {
 		t.Fatal("expected track to refuse a connection once draining")
 	}
 }
