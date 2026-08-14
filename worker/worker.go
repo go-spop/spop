@@ -34,6 +34,7 @@ const (
 // Status codes from SPOE 2.0 section 3.5.
 const (
 	statusCodeNormal         uint32 = 0
+	statusCodeIOError        uint32 = 1
 	statusCodeTimeout        uint32 = 2
 	statusCodeFrameTooBig    uint32 = 3
 	statusCodeInvalidFrame   uint32 = 4
@@ -42,7 +43,14 @@ const (
 	statusCodeNoCapabilities uint32 = 7
 	statusCodeBadVersion     uint32 = 8
 	statusCodeBadFrameSize   uint32 = 9
+	statusCodeUnknown        uint32 = 99
 )
+
+// errEncodeFrame reports a frame this agent could not turn into bytes, which is
+// an agent-side fault rather than anything the peer did or the socket suffered.
+// Distinguished from a write that failed so the two can be reported to the peer
+// under the status codes that describe them.
+var errEncodeFrame = errors.New("cannot marshal frame")
 
 // Timeouts bound how long a connection may block. Zero disables a timeout,
 // matching net.Conn deadline semantics.

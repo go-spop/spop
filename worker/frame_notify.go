@@ -41,14 +41,36 @@ func (w *worker) processNotifyFrame(f *frame.Frame) {
 	if err != nil {
 		w.logger.Errorf("ack frame write failed: %v", err)
 
+		// However it failed, this ACK is not arriving, and section 3.2.9 has
+		// the agent report an error rather than leave HAProxy waiting on a
+		// frame that is not coming. Closing is not only about the one ACK: a
+		// write that failed part way through has put a partial frame on the
+		// wire, and every frame after it would be read against the wrong
+		// offset. Reading on as if nothing had happened is the one thing this
+		// connection cannot do.
+		//
+		// The disconnect goes first, while the socket may still carry it. When
+		// the failure was the socket itself, that write fails in turn and is
+		// logged, which costs nothing: disconnectOnce means the peer is owed no
+		// second attempt.
+		switch {
 		// An ACK the handler made too large cannot be fragmented, so it cannot
-		// be sent at all. Section 3.2.9 has the agent report the error and
-		// close rather than leave HAProxy waiting on an ACK that will never
-		// arrive.
-		if errors.Is(err, frame.ErrFrameTooBig) {
+		// be sent at all.
+		case errors.Is(err, frame.ErrFrameTooBig):
 			w.disconnect(statusCodeFrameTooBig, err.Error())
-			w.close()
+
+		// The frame never reached the wire: the handler produced actions this
+		// agent cannot encode. Section 3.5 has no code for an agent-side bug,
+		// so it is reported as the unknown error it is rather than as the I/O
+		// error it is not.
+		case errors.Is(err, errEncodeFrame):
+			w.disconnect(statusCodeUnknown, err.Error())
+
+		default:
+			w.disconnect(statusCodeIOError, err.Error())
 		}
+
+		w.close()
 	}
 }
 
@@ -56,7 +78,7 @@ func (w *worker) writeFrame(f *frame.Frame) error {
 	buf := bytes.NewBuffer(make([]byte, 0))
 	n, err := f.Encode(buf)
 	if err != nil {
-		return fmt.Errorf("cannot marshal frame: %w", err)
+		return fmt.Errorf("%w: %w", errEncodeFrame, err)
 	}
 
 	// FRAME-LENGTH excludes its own 4 prefix bytes, so the negotiated ceiling
