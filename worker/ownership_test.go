@@ -6,10 +6,10 @@ import (
 	"net"
 	"testing"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerDispatchReportsFrameOwnership(t *testing.T) {
@@ -120,7 +120,7 @@ func newTestWorker(t *testing.T) *worker {
 	t.Cleanup(cancel)
 
 	return &worker{
-		conn:    engine.NewConn(server),
+		conn:    transport.NewConn(server),
 		handler: func(context.Context, *request.Request) {},
 		logger:  logger.NewNop(),
 		ctx:     ctx,

@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 	"github.com/go-spop/spop/worker"
 )
 
@@ -114,7 +114,7 @@ func New(handler func(context.Context, *request.Request), logger logger.Logger, 
 		ctx:         ctx,
 		cancel:      cancel,
 		done:        make(chan struct{}),
-		conns:       make(map[*engine.Conn]struct{}),
+		conns:       make(map[*transport.Conn]struct{}),
 	}
 
 	for _, opt := range opts {
@@ -157,7 +157,7 @@ type Agent struct {
 	mu        sync.Mutex
 	draining  bool
 	listeners []net.Listener
-	conns     map[*engine.Conn]struct{}
+	conns     map[*transport.Conn]struct{}
 	wg        sync.WaitGroup
 }
 
@@ -278,7 +278,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 
 	for {
 		// Before the accept, so a connection this agent will not serve costs it
-		// nothing: no accept, no engine.Conn, no worker. Every path below that
+		// nothing: no accept, no transport.Conn, no worker. Every path below that
 		// does not reach the worker goroutine has to release this.
 		if !agent.acquireConn() {
 			return ErrShutdown
@@ -310,7 +310,7 @@ func (agent *Agent) Serve(listener net.Listener) error {
 		// again rather than from whatever this one grew to.
 		backoff = 0
 
-		c := engine.NewConn(conn)
+		c := transport.NewConn(conn)
 		c.SetWriteTimeout(agent.timeouts.Write)
 
 		if !agent.track(c) {
@@ -420,8 +420,8 @@ func (agent *Agent) Shutdown(ctx context.Context) error {
 }
 
 // liveConns snapshots the roster. Callers hold agent.mu.
-func (agent *Agent) liveConns() []*engine.Conn {
-	conns := make([]*engine.Conn, 0, len(agent.conns))
+func (agent *Agent) liveConns() []*transport.Conn {
+	conns := make([]*transport.Conn, 0, len(agent.conns))
 	for c := range agent.conns {
 		conns = append(conns, c)
 	}
@@ -444,7 +444,7 @@ func (agent *Agent) closeAll() {
 
 // track registers a connection so Shutdown can reach it, reporting false once
 // the drain has begun.
-func (agent *Agent) track(c *engine.Conn) bool {
+func (agent *Agent) track(c *transport.Conn) bool {
 	agent.mu.Lock()
 	defer agent.mu.Unlock()
 
@@ -460,7 +460,7 @@ func (agent *Agent) track(c *engine.Conn) bool {
 
 // forget deregisters a connection whose worker has finished, so the roster does
 // not grow with connections the peer closed long ago.
-func (agent *Agent) forget(c *engine.Conn) {
+func (agent *Agent) forget(c *transport.Conn) {
 	agent.mu.Lock()
 	delete(agent.conns, c)
 	agent.mu.Unlock()

@@ -1,7 +1,7 @@
-// Package engine holds one connection to a SPOE engine, with the write
-// serialisation, close-once and deadline handling every frame written to it
-// depends on.
-package engine
+// Package transport carries SPOP frames over a network connection, adding the
+// write serialisation, close-once and deadline handling every frame written to
+// a peer depends on.
+package transport
 
 import (
 	"fmt"

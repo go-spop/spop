@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/frame"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorkerWritesNothingAfterTheAgentDisconnect(t *testing.T) {
@@ -80,7 +80,7 @@ func newObservedWorker(t *testing.T) (net.Conn, *worker) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
 
-	conn := engine.NewConn(server)
+	conn := transport.NewConn(server)
 	conn.SetWriteTimeout(2 * time.Second)
 
 	return client, &worker{

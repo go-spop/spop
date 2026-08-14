@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/go-spop/spop/client"
-	"github.com/go-spop/spop/engine"
 	"github.com/go-spop/spop/logger"
 	"github.com/go-spop/spop/request"
+	"github.com/go-spop/spop/transport"
 )
 
 func TestWorker(t *testing.T) {
@@ -26,7 +26,7 @@ func TestWorker(t *testing.T) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), Config{
+		Handle(transport.NewConn(server), Config{
 			Handler: m.Handle,
 			Logger:  logger.NewNop(),
 		})
@@ -61,13 +61,13 @@ func TestWorkerConcurrent(t *testing.T) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), Config{
+		Handle(transport.NewConn(server), Config{
 			Handler: m.Handle,
 			Logger:  logger.NewNop(),
 		})
 	}()
 	go func() {
-		Handle(engine.NewConn(server2), Config{
+		Handle(transport.NewConn(server2), Config{
 			Handler: m.Handle,
 			Logger:  logger.NewNop(),
 		})
@@ -138,18 +138,26 @@ func BenchmarkWorker(b *testing.B) {
 	}
 
 	go func() {
-		Handle(engine.NewConn(server), Config{
+		Handle(transport.NewConn(server), Config{
 			Handler: m.Handle,
 			Logger:  logger.NewNop(),
 		})
 		m.Finish()
 	}()
 
-	spoe.Init()
-	for n := 0; n < b.N; n++ {
-		spoe.Notify()
+	if err := spoe.Init(); err != nil {
+		b.Fatalf("unexpected error on Init: %v", err)
 	}
-	spoe.Stop()
+
+	for b.Loop() {
+		if err := spoe.Notify(); err != nil {
+			b.Fatalf("unexpected error on Notify: %v", err)
+		}
+	}
+
+	if err := spoe.Stop(); err != nil {
+		b.Fatalf("unexpected error on Stop: %v", err)
+	}
 
 	<-time.After(time.Millisecond * 100)
 	clientConn.Close()
