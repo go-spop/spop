@@ -11,6 +11,12 @@ import (
 
 func (w *worker) processNotifyFrame(f *frame.Frame) {
 	defer w.inflight.Done()
+
+	// Released once the handler has returned AND its ACK has been written.
+	// Releasing at handler return would admit a new NOTIFY while the previous
+	// ACK was still going out, which is not what "in flight" means.
+	defer w.releaseSlot()
+
 	defer frame.ReleaseFrame(f)
 
 	req := request.AcquireRequest()

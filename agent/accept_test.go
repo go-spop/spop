@@ -150,7 +150,44 @@ func TestAgent_ServeKeepsAcceptingBetweenTemporaryErrors(t *testing.T) {
 	}
 }
 
-// A permanent error is not something to wait out.
+func TestAgent_ServeReleasesTheConnectionSlotOnAnAcceptError(t *testing.T) {
+	retried := make(chan struct{}, 1)
+	l := &fakeListener{accept: func(calls int64) (net.Conn, error) {
+		if calls == 2 {
+			select {
+			case retried <- struct{}{}:
+			default:
+			}
+		}
+
+		return nil, tempError{}
+	}}
+
+	a := New(noopHandler, logger.NewNop(), WithMaxConnections(1))
+
+	served := make(chan error, 1)
+	go func() { served <- a.Serve(l) }()
+
+	select {
+	case <-retried:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Accept was never retried; the slot was not released on error")
+	}
+
+	if err := a.Shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown: %v", err)
+	}
+
+	select {
+	case err := <-served:
+		if !errors.Is(err, ErrShutdown) {
+			t.Fatalf("expected ErrShutdown, got %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Serve never returned")
+	}
+}
+
 func TestAgent_ServeReturnsAPermanentAcceptError(t *testing.T) {
 	want := errors.New("listener is broken")
 
@@ -163,9 +200,6 @@ func TestAgent_ServeReturnsAPermanentAcceptError(t *testing.T) {
 	}
 }
 
-// A drain must not wait out a backoff already in progress. The delay grows to a
-// second, and a shutdown that had to sit through it would report a timeout for
-// a drain that had nothing left to do.
 func TestAgent_ShutdownInterruptsAnAcceptBackoff(t *testing.T) {
 	l := &fakeListener{accept: func(int64) (net.Conn, error) { return nil, tempError{} }}
 
@@ -174,7 +208,6 @@ func TestAgent_ShutdownInterruptsAnAcceptBackoff(t *testing.T) {
 	served := make(chan error, 1)
 	go func() { served <- a.Serve(l) }()
 
-	// Long enough for the backoff to have grown well past its 5ms floor.
 	time.Sleep(300 * time.Millisecond)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
