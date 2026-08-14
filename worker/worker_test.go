@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"net"
+	"sync"
 	"testing"
 	"time"
 
@@ -71,24 +72,44 @@ func TestWorkerConcurrent(t *testing.T) {
 			Logger:  logger.NewNop(),
 		})
 	}()
-	duration := time.Second
+	stop := make(chan struct{})
+
+	var wg sync.WaitGroup
+
 	loop := func(s client.Client) {
-		if s.Init() != nil {
-			t.Fatal("unexpected error on Init")
+		defer wg.Done()
+
+		if err := s.Init(); err != nil {
+			t.Errorf("unexpected error on Init: %v", err)
+			return
 		}
+
 		for {
 			select {
-			case <-time.After(duration):
-				s.Stop()
+			case <-stop:
+				if err := s.Stop(); err != nil {
+					t.Errorf("unexpected error on Stop: %v", err)
+				}
+
+				return
 			default:
-				s.Notify()
+			}
+
+			if err := s.Notify(); err != nil {
+				t.Errorf("unexpected error on Notify: %v", err)
+				return
 			}
 		}
 	}
+
+	wg.Add(2)
+
 	go loop(spoe)
 	go loop(spoe2)
 
-	<-time.After(duration)
+	<-time.After(200 * time.Millisecond)
+	close(stop)
+	wg.Wait()
 }
 
 type MockedHandler struct {
