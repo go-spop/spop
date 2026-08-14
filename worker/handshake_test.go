@@ -7,59 +7,7 @@ import (
 	"github.com/go-spop/spop/frame"
 )
 
-// SPOE 2.0 section 3.2.4 makes "supported-versions", "max-frame-size" and
-// "capabilities" mandatory in the HAPROXY-HELLO, and requires the agent to
-// answer either an AGENT-HELLO carrying a version HAProxy announced and the
-// lower of the two frame-size maxima, or an AGENT-DISCONNECT describing the
-// incompatibility.
-//
-// Section 3.5's codes, asserted as spec literals rather than as the production
-// constants: 5 version value not found, 6 max-frame-size value not found,
-// 7 capabilities value not found, 8 unsupported version, 9 max-frame-size too
-// big or too small.
-const (
-	wantStatusCodeNoVersion      = uint32(5)
-	wantStatusCodeNoMaxFrameSize = uint32(6)
-	wantStatusCodeNoCapabilities = uint32(7)
-	wantStatusCodeBadVersion     = uint32(8)
-	wantStatusCodeBadFrameSize   = uint32(9)
-)
-
-// helloWith builds a HAPROXY-HELLO from the items given, so a test can omit one
-// rather than build the whole frame by hand.
-func helloWith(t *testing.T, items ...kvItem) *frame.Frame {
-	t.Helper()
-
-	f := frame.AcquireFrame()
-	f.Type = frame.TypeHAProxyHello
-
-	for _, item := range items {
-		f.KV.Add(item.name, item.value)
-	}
-
-	return f
-}
-
-type kvItem struct {
-	name  string
-	value any
-}
-
-func exchangeHello(t *testing.T, hello *frame.Frame) agentFrame {
-	t.Helper()
-
-	defer frame.ReleaseFrame(hello)
-
-	conn := startWorker(t)
-
-	if _, err := hello.Encode(conn); err != nil {
-		t.Fatalf("writing the HELLO: %v", err)
-	}
-
-	return readAgentFrame(t, bufio.NewReader(conn))
-}
-
-func TestWorker_handshakeRejectsIncompleteHello(t *testing.T) {
+func TestWorkerHandshakeRejectsIncompleteHello(t *testing.T) {
 	tests := []struct {
 		name     string
 		items    []kvItem
@@ -98,10 +46,7 @@ func TestWorker_handshakeRejectsIncompleteHello(t *testing.T) {
 	}
 }
 
-// A KV-VALUE carries its own type nibble, so a peer chooses the Go type of
-// every item. frame.Read type-checks only the three items it lifts into fields,
-// leaving these two for the handshake to check.
-func TestWorker_handshakeRejectsMistypedItems(t *testing.T) {
+func TestWorkerHandshakeRejectsMistypedItems(t *testing.T) {
 	tests := []struct {
 		name     string
 		items    []kvItem
@@ -134,9 +79,7 @@ func TestWorker_handshakeRejectsMistypedItems(t *testing.T) {
 	}
 }
 
-// An empty capabilities list is a well-formed answer: it means HAProxy supports
-// none of the optional capabilities, which is what the in-repo client sends.
-func TestWorker_handshakeAcceptsEmptyCapabilities(t *testing.T) {
+func TestWorkerHandshakeAcceptsEmptyCapabilities(t *testing.T) {
 	hello := helloWith(t,
 		kvItem{"supported-versions", "2.0"},
 		kvItem{"max-frame-size", uint32(16384)},
@@ -148,12 +91,12 @@ func TestWorker_handshakeAcceptsEmptyCapabilities(t *testing.T) {
 	}
 }
 
-func TestWorker_handshakeRejectsUnsupportedVersion(t *testing.T) {
+func TestWorkerHandshakeRejectsUnsupportedVersion(t *testing.T) {
 	tests := []struct {
 		name     string
 		versions string
 	}{
-		// The agent speaks 2.0, which is above everything announced here.
+
 		{"only an older major", "1.5"},
 		{"several older majors", "1.5, 1.0"},
 		{"not a version at all", "banana"},
@@ -173,9 +116,8 @@ func TestWorker_handshakeRejectsUnsupportedVersion(t *testing.T) {
 	}
 }
 
-func TestWorker_handshakeRejectsFrameSizeBelowTheFloor(t *testing.T) {
-	// Section 3.2: "The maximum size supported by peers for a frame must be
-	// greater than or equal to 256 bytes."
+func TestWorkerHandshakeRejectsFrameSizeBelowTheFloor(t *testing.T) {
+
 	hello := helloWith(t,
 		kvItem{"supported-versions", "2.0"},
 		kvItem{"max-frame-size", uint32(255)},
@@ -185,7 +127,7 @@ func TestWorker_handshakeRejectsFrameSizeBelowTheFloor(t *testing.T) {
 	assertAgentDisconnect(t, exchangeHello(t, hello), wantStatusCodeBadFrameSize)
 }
 
-func TestWorker_handshakeAcceptsAnnouncedVersion(t *testing.T) {
+func TestWorkerHandshakeAcceptsAnnouncedVersion(t *testing.T) {
 	tests := []struct {
 		name     string
 		versions string
@@ -216,9 +158,7 @@ func TestWorker_handshakeAcceptsAnnouncedVersion(t *testing.T) {
 	}
 }
 
-// Section 3.2.4: the AGENT-HELLO carries "the lower value between its maximum
-// size allowed for a frame and the HAProxy one".
-func TestWorker_handshakeAnnouncesTheLowerFrameSize(t *testing.T) {
+func TestWorkerHandshakeAnnouncesTheLowerFrameSize(t *testing.T) {
 	tests := []struct {
 		name    string
 		haproxy uint32
@@ -253,4 +193,44 @@ func TestWorker_handshakeAnnouncesTheLowerFrameSize(t *testing.T) {
 			}
 		})
 	}
+}
+
+const (
+	wantStatusCodeNoVersion      = uint32(5)
+	wantStatusCodeNoMaxFrameSize = uint32(6)
+	wantStatusCodeNoCapabilities = uint32(7)
+	wantStatusCodeBadVersion     = uint32(8)
+	wantStatusCodeBadFrameSize   = uint32(9)
+)
+
+func helloWith(t *testing.T, items ...kvItem) *frame.Frame {
+	t.Helper()
+
+	f := frame.AcquireFrame()
+	f.Type = frame.TypeHAProxyHello
+
+	for _, item := range items {
+		f.KV.Add(item.name, item.value)
+	}
+
+	return f
+}
+
+type kvItem struct {
+	name  string
+	value any
+}
+
+func exchangeHello(t *testing.T, hello *frame.Frame) agentFrame {
+	t.Helper()
+
+	defer frame.ReleaseFrame(hello)
+
+	conn := startWorker(t)
+
+	if _, err := hello.Encode(conn); err != nil {
+		t.Fatalf("writing the HELLO: %v", err)
+	}
+
+	return readAgentFrame(t, bufio.NewReader(conn))
 }

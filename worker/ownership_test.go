@@ -12,37 +12,7 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-// newTestWorker builds a worker whose connection absorbs whatever it writes.
-// The rejection paths below send an AGENT-DISCONNECT, and net.Pipe is
-// unbuffered, so without a reader those writes would block forever.
-func newTestWorker(t *testing.T) *worker {
-	t.Helper()
-
-	client, server := net.Pipe()
-	t.Cleanup(func() { client.Close() })
-
-	go func() { _, _ = io.Copy(io.Discard, client) }()
-
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-
-	return &worker{
-		conn:    engine.NewConn(server),
-		handler: func(context.Context, *request.Request) {},
-		logger:  logger.NewNop(),
-		ctx:     ctx,
-		cancel:  cancel,
-	}
-}
-
-// dispatch reports whether it took ownership of the frame. Only a NOTIFY does:
-// its goroutine outlives the read loop's iteration and releases the frame
-// itself. Every other outcome leaves the frame for the caller to release,
-// which is what stops each new exit path from having to remember.
-//
-// The point of the return value is that the rule becomes checkable. Before it
-// existed, six of run's exit paths never released at all.
-func TestWorker_dispatchReportsFrameOwnership(t *testing.T) {
+func TestWorkerDispatchReportsFrameOwnership(t *testing.T) {
 	tests := []struct {
 		name  string
 		ready bool
@@ -108,8 +78,7 @@ func TestWorker_dispatchReportsFrameOwnership(t *testing.T) {
 			transferred, done, err := w.dispatch(f)
 
 			if transferred {
-				// The goroutine owns the frame now and releases it itself;
-				// releasing here too would hand the pool the same frame twice.
+
 				w.inflight.Wait()
 			} else {
 				frame.ReleaseFrame(f)
@@ -127,5 +96,25 @@ func TestWorker_dispatchReportsFrameOwnership(t *testing.T) {
 				t.Fatalf("expected an error: %v, got %v", tc.wantErr, err)
 			}
 		})
+	}
+}
+
+func newTestWorker(t *testing.T) *worker {
+	t.Helper()
+
+	client, server := net.Pipe()
+	t.Cleanup(func() { client.Close() })
+
+	go func() { _, _ = io.Copy(io.Discard, client) }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	return &worker{
+		conn:    engine.NewConn(server),
+		handler: func(context.Context, *request.Request) {},
+		logger:  logger.NewNop(),
+		ctx:     ctx,
+		cancel:  cancel,
 	}
 }

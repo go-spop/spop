@@ -6,16 +6,7 @@ import (
 	"testing"
 )
 
-// SPOE 2.0 section 3.4 gives ACTION-UNSET-VAR exactly three fields after the
-// action-type byte:
-//
-//	ACTION-UNSET-VAR : <UNSET-VAR:1 byte><NB-ARGS:1 byte><VAR-SCOPE:1 byte><VAR-NAME>
-//
-// There is no value field. LIST-OF-ACTIONS carries no item count, so a receiver
-// reads entries back to back until the payload is exhausted: any byte past
-// VAR-NAME is read as the next entry's ACTION-TYPE.
-
-func TestAction_Marshal_wireBytes(t *testing.T) {
+func TestActionMarshalWireBytes(t *testing.T) {
 	tests := []struct {
 		name   string
 		action Action
@@ -25,46 +16,44 @@ func TestAction_Marshal_wireBytes(t *testing.T) {
 			name:   "unset-var carries no value field",
 			action: NewUnsetVar(ScopeSession, "ip_score"),
 			expect: []byte{
-				0x02,                                         // ACTION-TYPE: UNSET-VAR
-				0x02,                                         // NB-ARGS: scope and name
-				0x01,                                         // VAR-SCOPE: session
-				0x08, 'i', 'p', '_', 's', 'c', 'o', 'r', 'e', // VAR-NAME
+				0x02,
+				0x02,
+				0x01,
+				0x08, 'i', 'p', '_', 's', 'c', 'o', 'r', 'e',
 			},
 		},
 		{
 			name:   "set-var carries its value",
 			action: NewSetVar(ScopeSession, "ip_score", uint32(9)),
 			expect: []byte{
-				0x01,                                         // ACTION-TYPE: SET-VAR
-				0x03,                                         // NB-ARGS: scope, name and value
-				0x01,                                         // VAR-SCOPE: session
-				0x08, 'i', 'p', '_', 's', 'c', 'o', 'r', 'e', // VAR-NAME
-				0x03, 0x09, // VAR-VALUE: UINT32 typed data
+				0x01,
+				0x03,
+				0x01,
+				0x08, 'i', 'p', '_', 's', 'c', 'o', 'r', 'e',
+				0x03, 0x09,
 			},
 		},
-		// The reason an agent needs to encode an address at all: HAProxy sends
-		// one, the handler decides something about it, and the answer goes back
-		// as an IP-typed variable.
+
 		{
 			name:   "set-var carries an IPv4 value",
 			action: NewSetVar(ScopeSession, "client", net.ParseIP("192.0.2.1")),
 			expect: []byte{
-				0x01,                               // ACTION-TYPE: SET-VAR
-				0x03,                               // NB-ARGS: scope, name and value
-				0x01,                               // VAR-SCOPE: session
-				0x06, 'c', 'l', 'i', 'e', 'n', 't', // VAR-NAME
-				0x06, 192, 0, 2, 1, // VAR-VALUE: IPV4 typed data
+				0x01,
+				0x03,
+				0x01,
+				0x06, 'c', 'l', 'i', 'e', 'n', 't',
+				0x06, 192, 0, 2, 1,
 			},
 		},
 		{
 			name:   "set-var carries an IPv6 value",
 			action: NewSetVar(ScopeSession, "client", net.ParseIP("2001:db8::1")),
 			expect: []byte{
-				0x01,                               // ACTION-TYPE: SET-VAR
-				0x03,                               // NB-ARGS: scope, name and value
-				0x01,                               // VAR-SCOPE: session
-				0x06, 'c', 'l', 'i', 'e', 'n', 't', // VAR-NAME
-				0x07, // VAR-VALUE: IPV6 typed data
+				0x01,
+				0x03,
+				0x01,
+				0x06, 'c', 'l', 'i', 'e', 'n', 't',
+				0x07,
 				0x20, 0x01, 0x0d, 0xb8, 0, 0, 0, 0,
 				0, 0, 0, 0, 0, 0, 0, 0x01,
 			},
@@ -85,11 +74,7 @@ func TestAction_Marshal_wireBytes(t *testing.T) {
 	}
 }
 
-// Two unset-var actions marshalled back to back must produce a payload a
-// receiver can walk. The offset of the second entry is derived from the
-// grammar, not from the encoder's own output, so a trailing byte on the first
-// entry shows up as a misaligned second entry.
-func TestAction_Marshal_consecutiveUnsetVarsStayAligned(t *testing.T) {
+func TestActionMarshalConsecutiveUnsetVarsStayAligned(t *testing.T) {
 	first := NewUnsetVar(ScopeSession, "a")
 	second := NewUnsetVar(ScopeRequest, "b")
 
@@ -103,8 +88,6 @@ func TestAction_Marshal_consecutiveUnsetVarsStayAligned(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// ACTION-TYPE, NB-ARGS, VAR-SCOPE, then VAR-NAME's 1-byte length prefix and
-	// its single byte: five bytes, and nothing else.
 	const entryLen = 5
 
 	if len(buf) != entryLen*2 {

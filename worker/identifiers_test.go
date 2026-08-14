@@ -7,12 +7,7 @@ import (
 	"github.com/go-spop/spop/frame"
 )
 
-// SPOE 2.0 section 3.2.5, docs/SPOE.txt:961-962: an AGENT-HELLO's "STREAM-ID
-// and FRAME-ID are also set 0". The agent copied them from the HAPROXY-HELLO
-// instead, which is conformant only for as long as the peer honours its own
-// obligation to send 0; a peer that did not would have its violation
-// mirrored straight back at it.
-func TestWorker_agentHelloForcesZeroIdentifiers(t *testing.T) {
+func TestWorkerAgentHelloForcesZeroIdentifiers(t *testing.T) {
 	conn := startWorker(t)
 	reader := bufio.NewReader(conn)
 
@@ -23,7 +18,6 @@ func TestWorker_agentHelloForcesZeroIdentifiers(t *testing.T) {
 	)
 	defer frame.ReleaseFrame(hello)
 
-	// A non-conformant peer. The reply must not echo these back.
 	hello.StreamID = 42
 	hello.FrameID = 99
 

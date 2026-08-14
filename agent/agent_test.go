@@ -9,8 +9,6 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-func noopHandler(context.Context, *request.Request) {}
-
 func TestNewDefaults(t *testing.T) {
 	a := New(noopHandler, logger.NewNop())
 
@@ -114,3 +112,5 @@ func TestNewMaxConnectionsOption(t *testing.T) {
 		t.Fatalf("expected a semaphore of capacity 3, got %d", cap(a.connSlots))
 	}
 }
+
+func noopHandler(context.Context, *request.Request) {}

@@ -6,13 +6,7 @@ import (
 	"github.com/go-spop/spop/frame"
 )
 
-// Section 3.2.1's capabilities are negotiated, and an agent is free to announce
-// fewer than the peer offers. This agent announces exactly one, "pipelining",
-// whatever HAProxy puts in its own list: the ACK for a NOTIFY always goes back
-// on the connection the NOTIFY arrived on, so there is nothing "async" would be
-// true of. HAProxy 3.1 removed async from its own implementation, so on any
-// current peer the capability could not be negotiated even if it were offered.
-func TestWorker_advertisesOnlyPipelining(t *testing.T) {
+func TestWorkerAdvertisesOnlyPipelining(t *testing.T) {
 	tests := []struct {
 		name  string
 		items []kvItem

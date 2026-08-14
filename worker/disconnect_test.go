@@ -18,17 +18,88 @@ import (
 	"github.com/go-spop/spop/varint"
 )
 
-// SPOE 2.0 section 3.2.9: "If an error occurs, at anytime, from the agent
-// size, a AGENT-DISCONNECT frame is sent, with information describing the
-// error. [...] The agent must close the socket just after sending this frame."
-//
-// Section 3.5 supplies the status codes; code 4 is "invalid frame received".
-//
-// frame.Read rejects agent-typed frames, so these tests parse the reply off
-// the wire directly rather than through the library's own reader.
+func TestWorkerAgentDisconnectOnFrameBeforeHandshake(t *testing.T) {
+	tests := []struct {
+		name      string
+		frameType frame.Type
+	}{
+		{"notify before the handshake", frame.TypeNotify},
+		{"disconnect before the handshake", frame.TypeHAProxyDisconnect},
+	}
 
-// Asserted as the spec's own literal rather than the production constant, so
-// the test pins the wire value independently of the code under test.
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			conn := startWorker(t)
+
+			f := frame.AcquireFrame()
+			defer frame.ReleaseFrame(f)
+			f.Type = tc.frameType
+
+			if _, err := f.Encode(conn); err != nil {
+				t.Fatalf("writing the frame: %v", err)
+			}
+
+			assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
+		})
+	}
+}
+
+func TestWorkerAgentDisconnectOnUnreadableFrame(t *testing.T) {
+	conn := startWorker(t)
+
+	if _, err := conn.Write([]byte{0x00, 0x00, 0x00, 0x01, 0x01}); err != nil {
+		t.Fatalf("writing the frame: %v", err)
+	}
+
+	assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
+}
+
+func TestWorkerHealthcheckClosesWithoutDisconnect(t *testing.T) {
+	conn := startWorker(t)
+	reader := bufio.NewReader(conn)
+
+	hello := haproxyHello(t)
+	defer frame.ReleaseFrame(hello)
+	hello.KV.Add("healthcheck", true)
+
+	if _, err := hello.Encode(conn); err != nil {
+		t.Fatalf("writing the HELLO: %v", err)
+	}
+
+	if got := readAgentFrame(t, reader); got.frameType != frame.TypeAgentHello {
+		t.Fatalf("expected an AGENT-HELLO, got frame type %d", got.frameType)
+	}
+
+	if _, err := reader.ReadByte(); !errors.Is(err, io.EOF) {
+		t.Fatalf("expected the connection to close after the healthcheck reply, got %v", err)
+	}
+}
+
+func TestWorkerAgentDisconnectOnDuplicateHello(t *testing.T) {
+	conn := startWorker(t)
+	reader := bufio.NewReader(conn)
+
+	first := haproxyHello(t)
+	defer frame.ReleaseFrame(first)
+
+	if _, err := first.Encode(conn); err != nil {
+		t.Fatalf("writing the first HELLO: %v", err)
+	}
+
+	if got := readAgentFrame(t, reader); got.frameType != frame.TypeAgentHello {
+		t.Fatalf("expected an AGENT-HELLO for the first HELLO, got frame type %d", got.frameType)
+	}
+
+	second := haproxyHello(t)
+	defer frame.ReleaseFrame(second)
+
+	if _, err := second.Encode(conn); err != nil {
+		t.Fatalf("writing the second HELLO: %v", err)
+	}
+
+	assertAgentDisconnect(t, readAgentFrame(t, reader), wantStatusCodeInvalidFrame)
+}
+
 const wantStatusCodeInvalidFrame = uint32(4)
 
 type agentFrame struct {
@@ -53,7 +124,7 @@ func readAgentFrame(t *testing.T, r io.Reader) agentFrame {
 
 	got := agentFrame{frameType: frame.Type(body[0]), kv: kv.NewKV()}
 
-	body = body[5:] // FRAME-TYPE and FLAGS
+	body = body[5:]
 
 	var n int
 
@@ -76,7 +147,6 @@ func readAgentFrame(t *testing.T, r io.Reader) agentFrame {
 	return got
 }
 
-// haproxyHello builds the frame a conformant HAProxy opens a connection with.
 func haproxyHello(t *testing.T) *frame.Frame {
 	t.Helper()
 
@@ -89,8 +159,6 @@ func haproxyHello(t *testing.T) *frame.Frame {
 	return f
 }
 
-// startWorker runs a worker against one end of a pipe and hands the test the
-// other, with a deadline so a missing reply fails rather than hangs.
 func startWorker(t *testing.T) net.Conn {
 	t.Helper()
 
@@ -136,95 +204,7 @@ func assertAgentDisconnect(t *testing.T, got agentFrame, wantCode uint32) {
 		t.Fatal("the AGENT-DISCONNECT carried no message")
 	}
 
-	// Section 3.2.9: STREAM-ID and FRAME-ID must be set 0.
 	if got.streamID != 0 || got.frameID != 0 {
 		t.Fatalf("expected STREAM-ID and FRAME-ID of 0, got %d and %d", got.streamID, got.frameID)
 	}
-}
-
-func TestWorker_agentDisconnectOnFrameBeforeHandshake(t *testing.T) {
-	tests := []struct {
-		name      string
-		frameType frame.Type
-	}{
-		{"notify before the handshake", frame.TypeNotify},
-		{"disconnect before the handshake", frame.TypeHAProxyDisconnect},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			conn := startWorker(t)
-
-			f := frame.AcquireFrame()
-			defer frame.ReleaseFrame(f)
-			f.Type = tc.frameType
-
-			if _, err := f.Encode(conn); err != nil {
-				t.Fatalf("writing the frame: %v", err)
-			}
-
-			assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
-		})
-	}
-}
-
-func TestWorker_agentDisconnectOnUnreadableFrame(t *testing.T) {
-	conn := startWorker(t)
-
-	// FRAME-LENGTH 1 leaves no room for the FLAGS field, so Read rejects it.
-	if _, err := conn.Write([]byte{0x00, 0x00, 0x00, 0x01, 0x01}); err != nil {
-		t.Fatalf("writing the frame: %v", err)
-	}
-
-	assertAgentDisconnect(t, readAgentFrame(t, bufio.NewReader(conn)), wantStatusCodeInvalidFrame)
-}
-
-// The healthcheck is the one case where closing without an AGENT-DISCONNECT is
-// correct: section 3.2.4 has the agent reply with an AGENT-HELLO and close.
-func TestWorker_healthcheckClosesWithoutDisconnect(t *testing.T) {
-	conn := startWorker(t)
-	reader := bufio.NewReader(conn)
-
-	hello := haproxyHello(t)
-	defer frame.ReleaseFrame(hello)
-	hello.KV.Add("healthcheck", true)
-
-	if _, err := hello.Encode(conn); err != nil {
-		t.Fatalf("writing the HELLO: %v", err)
-	}
-
-	if got := readAgentFrame(t, reader); got.frameType != frame.TypeAgentHello {
-		t.Fatalf("expected an AGENT-HELLO, got frame type %d", got.frameType)
-	}
-
-	// EOF specifically: a deadline timeout here would mean the connection was
-	// left open, which is the regression this guards against.
-	if _, err := reader.ReadByte(); !errors.Is(err, io.EOF) {
-		t.Fatalf("expected the connection to close after the healthcheck reply, got %v", err)
-	}
-}
-
-func TestWorker_agentDisconnectOnDuplicateHello(t *testing.T) {
-	conn := startWorker(t)
-	reader := bufio.NewReader(conn)
-
-	first := haproxyHello(t)
-	defer frame.ReleaseFrame(first)
-
-	if _, err := first.Encode(conn); err != nil {
-		t.Fatalf("writing the first HELLO: %v", err)
-	}
-
-	if got := readAgentFrame(t, reader); got.frameType != frame.TypeAgentHello {
-		t.Fatalf("expected an AGENT-HELLO for the first HELLO, got frame type %d", got.frameType)
-	}
-
-	second := haproxyHello(t)
-	defer frame.ReleaseFrame(second)
-
-	if _, err := second.Encode(conn); err != nil {
-		t.Fatalf("writing the second HELLO: %v", err)
-	}
-
-	assertAgentDisconnect(t, readAgentFrame(t, reader), wantStatusCodeInvalidFrame)
 }

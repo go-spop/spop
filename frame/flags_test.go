@@ -6,11 +6,7 @@ import (
 	"testing"
 )
 
-// SPOE 2.0 section 3.2, docs/SPOE.txt:718, on the ABORT bit: "When it is set,
-// the FIN bit must also be set." Encode wrote f.Flags to the wire verbatim, so
-// a caller reaching for the field directly could emit the one combination the
-// spec forbids.
-func TestFrame_Encode_rejectsAbortWithoutFin(t *testing.T) {
+func TestFrameEncodeRejectsAbortWithoutFin(t *testing.T) {
 	f := NewFrame()
 	defer ReleaseFrame(f)
 
@@ -33,8 +29,7 @@ func TestFrame_Encode_rejectsAbortWithoutFin(t *testing.T) {
 	}
 }
 
-// ABORT with FIN is the legal pairing and must still encode.
-func TestFrame_Encode_acceptsAbortWithFin(t *testing.T) {
+func TestFrameEncodeAcceptsAbortWithFin(t *testing.T) {
 	f := NewFrame()
 	defer ReleaseFrame(f)
 
@@ -52,8 +47,7 @@ func TestFrame_Encode_acceptsAbortWithFin(t *testing.T) {
 	}
 }
 
-// The ordinary case: FIN alone, which is what NewFrame sets.
-func TestFrame_Encode_acceptsFinAlone(t *testing.T) {
+func TestFrameEncodeAcceptsFinAlone(t *testing.T) {
 	f := NewFrame()
 	defer ReleaseFrame(f)
 

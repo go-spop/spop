@@ -11,18 +11,12 @@ import (
 	"time"
 )
 
-// WritePayload holds the connection for the whole callback. Fragmentation will
-// later emit several frames inside one call, and SPOE 2.0 section 3.2 forbids
-// interleaving frames of different payloads on one connection; so bytes from
-// two concurrent callbacks must never overlap.
-func TestConn_WritePayload_serialisesConcurrentWriters(t *testing.T) {
+func TestConnWritePayloadSerialisesConcurrentWriters(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
 	c := NewConn(server)
 
-	// Each writer emits its own byte 64 times in two separate Write calls. If
-	// the lock does not span the callback, the two runs interleave.
 	const writers = 8
 	const runLength = 64
 
@@ -37,12 +31,6 @@ func TestConn_WritePayload_serialisesConcurrentWriters(t *testing.T) {
 					return err
 				}
 
-				// Without the lock this pause hands the connection to every
-				// other writer, so the two halves are guaranteed to be split
-				// apart. Holding the lock, it only makes the test take
-				// writers*pause to run. Relying on the scheduler instead would
-				// make this a coin flip; it caught a missing lock about half
-				// the time.
 				time.Sleep(2 * time.Millisecond)
 
 				_, err := w.Write(half)
@@ -71,7 +59,7 @@ func TestConn_WritePayload_serialisesConcurrentWriters(t *testing.T) {
 	}
 }
 
-func TestConn_Close_isIdempotent(t *testing.T) {
+func TestConnCloseIsIdempotent(t *testing.T) {
 	_, server := net.Pipe()
 
 	c := NewConn(server)
@@ -93,8 +81,7 @@ func TestConn_Close_isIdempotent(t *testing.T) {
 	}
 }
 
-// A write to a closed connection must fail rather than block or panic.
-func TestConn_WritePayload_failsWhenClosed(t *testing.T) {
+func TestConnWritePayloadFailsWhenClosed(t *testing.T) {
 	_, server := net.Pipe()
 
 	c := NewConn(server)
@@ -111,7 +98,7 @@ func TestConn_WritePayload_failsWhenClosed(t *testing.T) {
 	}
 }
 
-func TestConn_WriteFrame_writesEveryByte(t *testing.T) {
+func TestConnWriteFrameWritesEveryByte(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
@@ -139,7 +126,7 @@ func TestConn_WriteFrame_writesEveryByte(t *testing.T) {
 	}
 }
 
-func TestConn_WriteFrame_failsWhenClosed(t *testing.T) {
+func TestConnWriteFrameFailsWhenClosed(t *testing.T) {
 	_, server := net.Pipe()
 
 	c := NewConn(server)
@@ -152,10 +139,7 @@ func TestConn_WriteFrame_failsWhenClosed(t *testing.T) {
 	}
 }
 
-// A peer that never reads must not pin a writer forever. net.Pipe is
-// unbuffered, so a Write with no reader blocks until the deadline fires; an
-// exact model of a wedged peer.
-func TestConn_WritePayload_honoursTheWriteTimeout(t *testing.T) {
+func TestConnWritePayloadHonoursTheWriteTimeout(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
@@ -177,9 +161,7 @@ func TestConn_WritePayload_honoursTheWriteTimeout(t *testing.T) {
 	}
 }
 
-// Zero means no deadline, so a write waits for its reader however long that
-// takes.
-func TestConn_WritePayload_zeroTimeoutDoesNotExpire(t *testing.T) {
+func TestConnWritePayloadZeroTimeoutDoesNotExpire(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
@@ -192,8 +174,6 @@ func TestConn_WritePayload_zeroTimeoutDoesNotExpire(t *testing.T) {
 		done <- c.WriteFrame(want)
 	}()
 
-	// Read only after a pause the write would not survive if a deadline of the
-	// previous test's length were somehow in force.
 	time.Sleep(100 * time.Millisecond)
 
 	got := make([]byte, len(want))
@@ -211,8 +191,7 @@ func TestConn_WritePayload_zeroTimeoutDoesNotExpire(t *testing.T) {
 	}
 }
 
-// A deadline must not leak into the next write on the same connection.
-func TestConn_WritePayload_clearsTheDeadlineAfterwards(t *testing.T) {
+func TestConnWritePayloadClearsTheDeadlineAfterwards(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 
@@ -238,7 +217,7 @@ func TestConn_WritePayload_clearsTheDeadlineAfterwards(t *testing.T) {
 	}
 }
 
-func TestConn_WriteTimeout_roundTrips(t *testing.T) {
+func TestConnWriteTimeoutRoundTrips(t *testing.T) {
 	_, server := net.Pipe()
 	defer server.Close()
 
@@ -254,8 +233,7 @@ func TestConn_WriteTimeout_roundTrips(t *testing.T) {
 	}
 }
 
-// The read loop drives its own deadline through the connection.
-func TestConn_SetReadDeadline(t *testing.T) {
+func TestConnSetReadDeadline(t *testing.T) {
 	client, server := net.Pipe()
 	defer client.Close()
 

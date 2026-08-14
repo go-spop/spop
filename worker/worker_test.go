@@ -12,19 +12,6 @@ import (
 	"github.com/go-spop/spop/request"
 )
 
-type MockedHandler struct {
-	handleFunc func(ctx context.Context, r *request.Request)
-	finishFunc func()
-}
-
-func (h *MockedHandler) Handle(ctx context.Context, r *request.Request) {
-	h.handleFunc(ctx, r)
-}
-
-func (h *MockedHandler) Finish() {
-	h.finishFunc()
-}
-
 func TestWorker(t *testing.T) {
 	clientConn, server := net.Pipe()
 	spoe := client.NewClient(clientConn)
@@ -54,15 +41,10 @@ func TestWorker(t *testing.T) {
 		t.Fatal("unexpected error on Stop")
 	}
 
-	// Let's wait a bit to have everything finished
 	<-time.After(time.Millisecond * 100)
 	clientConn.Close()
 }
 
-/*
- * simple test that check for race condition
- * tests need to be run with -race
- */
 func TestWorkerConcurrent(t *testing.T) {
 	clientConn, server := net.Pipe()
 	clientConn2, server2 := net.Pipe()
@@ -106,14 +88,22 @@ func TestWorkerConcurrent(t *testing.T) {
 	go loop(spoe)
 	go loop(spoe2)
 
-	// Let's wait a bit to have everything finished
 	<-time.After(duration)
 }
 
-/*
- * Simple bench to compare memory usage
- *
- */
+type MockedHandler struct {
+	handleFunc func(ctx context.Context, r *request.Request)
+	finishFunc func()
+}
+
+func (h *MockedHandler) Handle(ctx context.Context, r *request.Request) {
+	h.handleFunc(ctx, r)
+}
+
+func (h *MockedHandler) Finish() {
+	h.finishFunc()
+}
+
 func BenchmarkWorker(b *testing.B) {
 	clientConn, server := net.Pipe()
 	spoe := client.NewClient(clientConn)
@@ -140,7 +130,6 @@ func BenchmarkWorker(b *testing.B) {
 	}
 	spoe.Stop()
 
-	// Let's wait a bit to have everything finished
 	<-time.After(time.Millisecond * 100)
 	clientConn.Close()
 }

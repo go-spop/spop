@@ -2,11 +2,7 @@ package typeddata
 
 import "testing"
 
-// Every buffer here is reachable from a peer-supplied frame body. Decode must
-// return an error for each; it must never panic, and it must never report a
-// zero-length successful decode, which would leave a caller's cursor parked on
-// the same byte.
-func TestDecode_malformed(t *testing.T) {
+func TestDecodeMalformed(t *testing.T) {
 	tests := []struct {
 		name  string
 		input []byte
@@ -38,16 +34,13 @@ func TestDecode_malformed(t *testing.T) {
 	}
 }
 
-// A caller advances its cursor by the returned count. Reporting success while
-// consuming nothing lets a malformed value be silently reinterpreted as the
-// start of the next field.
-func TestDecode_neverSucceedsWithoutConsuming(t *testing.T) {
+func TestDecodeNeverSucceedsWithoutConsuming(t *testing.T) {
 	inputs := [][]byte{
-		{0x02},       // int32, no value
-		{0x03},       // uint32, no value
-		{0x04},       // int64, no value
-		{0x05},       // uint64, no value
-		{0x02, 0xf0}, // int32, truncated varint
+		{0x02},
+		{0x03},
+		{0x04},
+		{0x05},
+		{0x02, 0xf0},
 	}
 
 	for _, in := range inputs {
