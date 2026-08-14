@@ -13,7 +13,7 @@ import (
 func TestFrameReadLimitRejectsAboveTheLimit(t *testing.T) {
 	f := NewFrame()
 
-	err := f.ReadLimit(bytes.NewReader(header(300, TypeHAProxyHello)), 256)
+	err := f.ReadLimit(bytes.NewReader(header(300, TypeHAProxyHello)), 256, nil)
 	if !errors.Is(err, ErrFrameTooBig) {
 		t.Fatalf("expected ErrFrameTooBig, got %v", err)
 	}
@@ -22,7 +22,7 @@ func TestFrameReadLimitRejectsAboveTheLimit(t *testing.T) {
 func TestFrameReadLimitAcceptsTheLimitItself(t *testing.T) {
 	f := NewFrame()
 
-	err := f.ReadLimit(bytes.NewReader(header(256, TypeHAProxyHello)), 256)
+	err := f.ReadLimit(bytes.NewReader(header(256, TypeHAProxyHello)), 256, nil)
 	if errors.Is(err, ErrFrameTooBig) {
 		t.Fatal("a frame of exactly the limit was rejected as too big")
 	}
@@ -31,7 +31,7 @@ func TestFrameReadLimitAcceptsTheLimitItself(t *testing.T) {
 func TestFrameReadLimitCapsTheLimitAtMaxFrameSize(t *testing.T) {
 	f := NewFrame()
 
-	err := f.ReadLimit(bytes.NewReader(header(MaxFrameSize+1, TypeHAProxyHello)), ^uint32(0))
+	err := f.ReadLimit(bytes.NewReader(header(MaxFrameSize+1, TypeHAProxyHello)), ^uint32(0), nil)
 	if !errors.Is(err, ErrFrameTooBig) {
 		t.Fatalf("expected a limit above MaxFrameSize to be capped, got %v", err)
 	}
